@@ -206,11 +206,6 @@ async fn main() -> Result<(), rocket::Error> {
     let aws_region = std::env::var("AWS_REGION").expect("AWS_REGION not found in environment");
     let s3_bucket = std::env::var("S3_BUCKET").expect("S3_BUCKET not found in environment");
 
-    let mongo_db_name = std::env::var("MONGO_DB_NAME").expect("MONGO_DB_NAME not found in environment");
-    let mongo_username = std::env::var("MONGO_USERNAME").expect("MONGO_USERNAME not found in environment");
-    let mongo_password = std::env::var("MONGO_PASSWORD").expect("MONGO_PASSWORD not found in environment");
-    let mongo_connection = std::env::var("MONGO_CONNECTION").expect("MONGO_CONNECTION not found in environment");
-
     let azure_storage_container = std::env::var("AZURE_STORAGE_CONTAINER").expect("AZURE_STORAGE_CONTAINER not found in environment");
     let azure_storage_account = std::env::var("AZURE_STORAGE_ACCOUNT").expect("AZURE_STORAGE_ACCOUNT not found in environment");
     let azure_storage_access_key = std::env::var("AZURE_STORAGE_ACCESS_KEY").expect("AZURE_STORAGE_ACCESS_KEY not found in environment");
@@ -225,11 +220,6 @@ async fn main() -> Result<(), rocket::Error> {
         std::env::set_var("AWS_ACCESS_KEY_ID", aws_access_key);
         std::env::set_var("AWS_REGION", aws_region);
         std::env::set_var("S3_BUCKET", s3_bucket);
-
-        std::env::set_var("MONGO_DB_NAME", mongo_db_name);
-        std::env::set_var("MONGO_USERNAME", mongo_username);
-        std::env::set_var("MONGO_PASSWORD", mongo_password);
-        std::env::set_var("MONGO_CONNECTION", mongo_connection);
 
         std::env::set_var("AZURE_STORAGE_CONTAINER", azure_storage_container);
         std::env::set_var("AZURE_STORAGE_ACCOUNT", azure_storage_account);

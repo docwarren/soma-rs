@@ -1,6 +1,6 @@
-# seq - Genomic File Query Tool
+# seqa - Genomic File Query Tool
 
-seq is a fast, efficient command-line tool for querying genomic files across multiple storage backends. It supports local files, cloud storage (S3, Azure, GCS), and HTTP/HTTPS URLs.
+seqa is a fast, efficient command-line tool for querying genomic files across multiple storage backends. It supports local files, cloud storage (S3, Azure, GCS), and HTTP/HTTPS URLs.
 
 ## Prerequisites
 
@@ -26,14 +26,14 @@ seq is a fast, efficient command-line tool for querying genomic files across mul
 cd soma-rs
 
 # Build the CLI tool
-cargo build --release -p seq
+cargo build --release -p seqa
 
-# The binary will be available at target/release/seq
+# The binary will be available at target/release/seqa
 ```
 
 ### Add to PATH (Optional)
 
-To use `seq` from anywhere without specifying the full path, add it to your PATH:
+To use `seqa` from anywhere without specifying the full path, add it to your PATH:
 
 **Option 1: Add the binary directory to PATH**
 
@@ -52,11 +52,11 @@ source ~/.bashrc  # or ~/.zshrc
 
 ```bash
 # Create a symlink in /usr/local/bin (may require sudo)
-sudo ln -s /path/to/soma-rs/target/release/seq /usr/local/bin/seq
+sudo ln -s /path/to/soma-rs/target/release/seqa /usr/local/bin/seqa
 
 # Or in your local bin directory (no sudo required)
 mkdir -p ~/.local/bin
-ln -s /path/to/soma-rs/target/release/seq ~/.local/bin/seq
+ln -s /path/to/soma-rs/target/release/seqa ~/.local/bin/seqa
 # Make sure ~/.local/bin is in your PATH
 export PATH="$PATH:$HOME/.local/bin"
 ```
@@ -65,17 +65,17 @@ export PATH="$PATH:$HOME/.local/bin"
 
 ```bash
 # Copy to /usr/local/bin (may require sudo)
-sudo cp target/release/seq /usr/local/bin/
+sudo cp target/release/seqa /usr/local/bin/
 
 # Or to your local bin directory
 mkdir -p ~/.local/bin
-cp target/release/seq ~/.local/bin/
+cp target/release/seqa ~/.local/bin/
 ```
 
 **Verify installation:**
 ```bash
-which seq
-seq --version
+which seqa
+seqa --version
 ```
 
 ## Storage Backends
@@ -187,12 +187,12 @@ export AWS_REGION=us-east-1
 ### Basic Command Structure
 
 ```bash
-seq search <file> <coordinates> [OPTIONS]
+seqa search <file> <coordinates> [OPTIONS]
 ```
 
 ### Coordinate Formats
 
-seq supports three coordinate formats:
+seqa supports three coordinate formats:
 
 1. **Full chromosome**: `chr12` or `12`
    - Returns all records on the chromosome
@@ -226,69 +226,69 @@ seq supports three coordinate formats:
 
 ```bash
 # Query a BAM file with range
-seq search /path/to/file.bam chr4:12345-13456
+seqa search /path/to/file.bam chr4:12345-13456
 
 # Query entire chromosome with reference genome
-seq search /path/to/file.bam chr12 -r hg38
+seqa search /path/to/file.bam chr12 -r hg38
 
 # Query single position
-seq search /path/to/file.vcf.gz chr1:12000
+seqa search /path/to/file.vcf.gz chr1:12000
 
 # Include header in output
-seq search /path/to/file.gff.gz chr5:1000-2000 -w
+seqa search /path/to/file.gff.gz chr5:1000-2000 -w
 
 # Get header only
-seq search /path/to/file.bam chr1 -o
+seqa search /path/to/file.bam chr1 -o
 ```
 
 #### Cloud Storage
 
 ```bash
 # S3
-seq search s3://my-bucket/samples/sample1.bam chr1:1000000-2000000 -r hg38
+seqa search s3://my-bucket/samples/sample1.bam chr1:1000000-2000000 -r hg38
 
 # Azure
-seq search az://my-container/data/variants.vcf.gz chr12 -r hg19
+seqa search az://my-container/data/variants.vcf.gz chr12 -r hg19
 
 # Google Cloud Storage
-seq search gs://my-bucket/annotations.gff.gz chr5:12345-67890
+seqa search gs://my-bucket/annotations.gff.gz chr5:12345-67890
 
 # HTTPS
-seq search https://example.com/public/file.bam chr1:1000000-1500000
+seqa search https://example.com/public/file.bam chr1:1000000-1500000
 ```
 
 #### BigWig and BigBed (Self-Indexed)
 
 ```bash
 # BigWig files don't require separate index files
-seq search /path/to/file.bw chr4:12345-13456
+seqa search /path/to/file.bw chr4:12345-13456
 
 # Same for BigBed
-seq search /path/to/file.bb chr1:1000000-2000000
+seqa search /path/to/file.bb chr1:1000000-2000000
 ```
 
 #### FASTA Files
 
 ```bash
 # Query a reference sequence
-seq search /path/to/genome.fa chr12:12000-15000
+seqa search /path/to/genome.fa chr12:12000-15000
 
 # Get entire chromosome sequence
-seq search /path/to/genome.fa chr22 -r hg38
+seqa search /path/to/genome.fa chr22 -r hg38
 ```
 
 #### Using Numeric Chromosome Names
 
 ```bash
 # These are equivalent to chr1, chr12, chrX
-seq search file.bam 1:1000-2000
-seq search file.bam 12
-seq search file.bam X:5000000-6000000
+seqa search file.bam 1:1000-2000
+seqa search file.bam 12
+seqa search file.bam X:5000000-6000000
 ```
 
 ## Output
 
-seq writes results to standard output in the native format of each file type:
+seqa writes results to standard output in the native format of each file type:
 - BAM → SAM format
 - VCF → VCF format
 - GFF/GTF → GFF/GTF format
@@ -301,18 +301,18 @@ Output can be piped to other tools or redirected to files:
 
 ```bash
 # Pipe to grep
-seq search file.bam chr1:1000-2000 | grep "MAPQ"
+seqa search file.bam chr1:1000-2000 | grep "MAPQ"
 
 # Redirect to file
-seq search file.vcf.gz chr12 -r hg38 > chr12_variants.vcf
+seqa search file.vcf.gz chr12 -r hg38 > chr12_variants.vcf
 
 # Count records
-seq search file.bam chr1:1000000-2000000 | wc -l
+seqa search file.bam chr1:1000000-2000000 | wc -l
 ```
 
 ## Coordinate Systems
 
-seq preserves native coordinate systems:
+seqa preserves native coordinate systems:
 - **0-based half-open [begin, end)**: BAM, BED, BigWig, BigBed
 - **1-based closed [begin, end]**: VCF, GFF, GTF
 
