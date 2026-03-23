@@ -1,0 +1,11 @@
+[package]
+name = "seqa"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.41", features = ["derive"] }
+command = "0.0.0"
+soma_core = { path = "../soma_core" }
+thiserror = "2.0.16"
+tokio = "1.47.0"

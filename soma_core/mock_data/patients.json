@@ -1,0 +1,73 @@
+[
+  {
+    "firstName": "John",
+    "lastName": "Doe",
+    "dob": "1990-01-01",
+    "sex": "M",
+    "address": {
+      "street": "123 Main St",
+      "city": "Anytown",
+      "state": "CA",
+      "zip": "12345"
+    },
+    "phoneNumbers": [
+      {
+        "type": "home",
+        "number": "555-1234"
+      },
+      {
+        "type": "work",
+        "number": "555-5678"
+      }
+    ],
+    "insuranceNumbers": [
+      {
+        "provider": "Health Insurance Co",
+        "policyNumber": "ABC123456"
+      },
+      {
+        "provider": "Another Insurer",
+        "policyNumber": "XYZ987654"
+      }
+    ],
+    "idNumbers": [
+      {
+        "type": "SSN",
+        "number": "123-45-6789"
+      },
+      {
+        "type": "Driver's License",
+        "number": "D1234567"
+      }
+    ]
+  },
+  {
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "dob": "1985-05-15",
+    "sex": "F",
+    "address": {
+      "street": "456 Elm St",
+      "city": "Othertown",
+      "state": "NY",
+      "zip": "67890"
+    },
+    "phoneNumbers": [
+      {
+        "type": "home",
+        "number": "555-8765"
+      },
+      {
+        "type": "work",
+        "number": "555-4321"
+      }
+    ],
+    "insuranceNumbers": [
+        {
+            "provider": "Health Insurance Co",
+            "policyNumber": "DEF654321"
+        }
+    ],
+    "idNumbers": []
+  }
+]

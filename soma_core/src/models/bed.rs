@@ -1,0 +1,259 @@
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+
+use crate::traits::feature::Feature;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BedLine {
+    pub chromosome: String,
+    pub begin: u32,
+    pub end: u32,
+    pub name: Option<String>,
+    pub score: Option<u16>,
+    pub strand: Option<String>,
+    pub thick_begin: Option<u32>,
+    pub thick_end: Option<u32>,
+    pub item_rgb: Option<String>,
+    pub block_count: Option<u32>,
+    pub block_sizes: Option<Vec<u32>>,
+    pub block_begins: Option<Vec<u32>>,
+    pub extra_fields: Option<String>,  // Any fields beyond the standard 12 BED columns
+}
+
+impl BedLine {
+
+    pub const COLUMNS: [&str; 12] = [
+        "chromosome",
+        "begin",
+        "end",
+        "name",
+        "score",
+        "strand",
+        "thick_begin",
+        "thick_end",
+        "item_rgb",
+        "block_count",
+        "block_sizes",
+        "block_begins"
+    ];
+
+    pub fn from_line(line: String) -> Result<BedLine, String> {
+        let tokens = line.split('\t').collect::<Vec<&str>>();
+        let chromosome = tokens[0].to_string();
+
+        let begin = match tokens[1]
+            .parse::<u32>()
+        {
+            Ok(pos) => pos,
+            Err(_) => {
+                return Err(format!("Invalid begin position in BED line: {}", tokens[1]));
+            }
+        };
+
+        let end = match tokens[2]
+            .parse::<u32>()
+        {
+            Ok(pos) => pos,
+            Err(_) => {
+                return Err(format!("Invalid end position in BED line: {}", tokens[2]));
+            }
+        };
+
+        let name = if tokens.len() > 3 {
+            Some(tokens[3].to_string())
+        } else {
+            None
+        };
+
+        let score = if tokens.len() > 4 {
+            match tokens[4].parse::<u16>() {
+                Ok(score) => Some(score),
+                Err(_) => return Err(format!("Invalid score in BED line: {}", tokens[4])),
+            }
+        } else {
+            None
+        };
+
+        let strand = if tokens.len() > 5 {
+            Some(tokens[5].to_string())
+        } else {
+            None
+        };
+
+        let thick_begin = if tokens.len() > 6 {
+            match tokens[6].parse::<u32>() {
+                Ok(thick_begin) => Some(thick_begin),
+                Err(_) => return Err(format!("Invalid thick_begin in BED line: {}", tokens[6])),
+            }
+        } else {
+            None
+        };
+
+        let thick_end = if tokens.len() > 7 {
+            match tokens[7].parse::<u32>() {
+                Ok(thick_end) => Some(thick_end),
+                Err(_) => return Err(format!("Invalid thick_end in BED line: {}", tokens[7])),
+            }
+        } else {
+            None
+        };
+        let item_rgb = if tokens.len() > 8 {
+            Some(tokens[8].to_string())
+        } else {
+            None
+        };
+
+        let block_count = if tokens.len() > 9 {
+            match tokens[9].parse::<u32>() {
+                Ok(block_count) => Some(block_count),
+                Err(_) => return Err(format!("Invalid block_count in BED line: {}", tokens[9])),
+            }
+        } else {
+            None
+        };
+
+        let block_sizes = if tokens.len() > 10 {
+            match tokens[10]
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.parse::<u32>())
+                .collect()
+            {
+                Ok(block_sizes) => Some(block_sizes),
+                Err(_) => return Err(format!("Invalid block_sizes in BED line: {}", tokens[10])),
+            }
+        } else {
+            None
+        };
+
+        let block_begins = if tokens.len() > 11 {
+             match tokens[11]
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.parse::<u32>())
+                .collect()
+            {
+                Ok(block_begins) => Some(block_begins),
+                Err(_) => return Err(format!("Invalid block_begins in BED line: {}", tokens[11])),
+            }
+        } else {
+            None
+        };
+
+        // Capture any extra fields beyond the standard 12 BED columns
+        let extra_fields = if tokens.len() > 12 {
+            Some(tokens[12..].join("\t"))
+        } else {
+            None
+        };
+
+        Ok(BedLine {
+            chromosome,
+            begin,
+            end,
+            name,
+            score,
+            strand,
+            thick_begin,
+            thick_end,
+            item_rgb,
+            block_count,
+            block_sizes,
+            block_begins,
+            extra_fields,
+        })
+    }
+}
+
+impl Display for BedLine {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut fields = Vec::new();
+
+        if let Some(name) = &self.name {
+            fields.push(name.clone());
+        }
+        if let Some(score) = self.score {
+            fields.push(score.to_string());
+        }
+        if let Some(strand) = &self.strand {
+            fields.push(strand.clone());
+        }
+        if let Some(thick_begin) = self.thick_begin {
+            fields.push(thick_begin.to_string());
+        }
+        if let Some(thick_end) = self.thick_end {
+            fields.push(thick_end.to_string());
+        }
+        if let Some(item_rgb) = &self.item_rgb {
+            fields.push(item_rgb.clone());
+        }
+        if let Some(block_count) = self.block_count {
+            fields.push(block_count.to_string());
+        }
+        if let Some(block_sizes) = &self.block_sizes {
+            // BED spec requires trailing comma for block_sizes
+            fields.push(format!("{},", block_sizes.iter().map(|b| b.to_string()).collect::<Vec<String>>().join(",")));
+        }
+        if let Some(block_begins) = &self.block_begins {
+            // BED spec requires trailing comma for block_begins
+            fields.push(format!("{},", block_begins.iter().map(|b| b.to_string()).collect::<Vec<String>>().join(",")));
+        }
+        if let Some(extra) = &self.extra_fields {
+            fields.push(extra.clone());
+        }
+        write!(f, "{}\t{}\t{}\t{}", self.chromosome, self.begin, self.end, fields.join("\t"))
+    }
+}
+
+impl Feature for BedLine {
+
+    fn get_chromosome(&self) -> String {
+        self.chromosome.clone()
+    }
+
+    fn get_begin(&self) -> u32 {
+        self.begin
+    }
+
+    fn get_end(&self) -> u32 {
+        self.end
+    }
+
+    fn get_length(&self) -> u32 {
+        self.end - self.begin
+    }
+
+    fn get_id(&self) -> String {
+        if let Some(name) = &self.name {
+            name.clone()
+        } else {
+            format!("{}:{}-{}", self.chromosome, self.begin, self.end)
+        }
+    }
+
+    fn coordinate_system(&self) -> super::coordinates::CoordinateSystem {
+        super::coordinates::CoordinateSystem::ZeroBasedHalfOpen
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn it_should_init_from_string() {
+        let test_line1 = "chr12\t0\t133851895\tdup\t0\t.\t0\t133851895\t0,0,255\t1\t133851895\t0".to_string();
+        let test_line2 = "chr12\t111270\t146659\t12p13.33x3\t0\t.\t111270\t146659\t0,0,255\t1\t35389\t0".to_string();
+
+        // BED spec requires trailing commas for block_sizes and block_begins
+        let expected_1 = "chr12\t0\t133851895\tdup\t0\t.\t0\t133851895\t0,0,255\t1\t133851895,\t0,".to_string();
+        let expected_2 = "chr12\t111270\t146659\t12p13.33x3\t0\t.\t111270\t146659\t0,0,255\t1\t35389,\t0,".to_string();
+
+        let bed1 = BedLine::from_line(test_line1).expect("Failed to parse BED line 1");
+        assert_eq!(format!("{}", bed1), expected_1);
+
+        let bed2 = BedLine::from_line(test_line2).expect("Failed to parse BED line 2");
+        assert_eq!(format!("{}", bed2), expected_2);
+    }
+}

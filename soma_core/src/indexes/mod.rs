@@ -1,0 +1,12 @@
+pub mod test_data;
+pub mod bin_util;
+pub mod chunk;
+pub mod chunk_util;
+pub mod bin;
+pub mod virtual_offset;
+pub mod constants;
+pub mod tabix;
+pub mod bai;
+pub mod fai;
+pub mod bigwig;
+pub mod traits;
