@@ -1,7 +1,5 @@
 #[macro_use] extern crate rocket;
 
-use soma_core::mongo::model::patient::Patient;
-use soma_core::mongo::model::user::User;
 use soma_core::sqlite::genes::{self, GeneError};
 use soma_core::stores::StoreService;
 
@@ -22,11 +20,9 @@ use thiserror::Error;
 use soma_core::models::FileSearchRequest;
 use soma_core::models::gene_coordinate::GeneCoordinate;
 use soma_core::services::search::{ SearchError, SearchService };
-use crate::mongo::{ Name, PatientService, UserService };
 use crate::{search::models::SearchRequest};
 
 pub mod search;
-pub mod mongo;
 
 /// File entry with metadata - matches Tauri's FileEntry struct
 #[derive(Serialize)]
@@ -196,64 +192,6 @@ async fn get_coordinates(gene: &str, genome: &str) -> Result<Json<GeneCoordinate
     Ok(Json(coord))
 }
 
-#[post("/", data="<patient_id>")]
-async fn get_patient_by_id(patient_id: Json<String>) -> Result<Json<Vec<Patient>>, ApiError> {
-    let id = patient_id.into_inner();
-    let patient_service = PatientService::new();
-    patient_service.get_patient_by_id(&id)
-        .await
-        .map(Json)
-        .map_err(|e| ApiError::PatientNotFound(format!("id={}: {}", id, e)))
-}
-
-#[post("/", data="<name>")]
-async fn get_patient_by_name(name: Json<Name>) -> Result<Json<Vec<Patient>>, ApiError> {
-    let patient_service = PatientService::new();
-    patient_service.get_patient_by_name(&name.first_name, &name.last_name)
-        .await
-        .map(Json)
-        .map_err(|e| ApiError::PatientNotFound(format!("{} {}: {}", name.first_name, name.last_name, e)))
-}
-
-#[post("/", data="<dob>")]
-async fn get_patient_by_dob(dob: Json<String>) -> Result<Json<Vec<Patient>>, ApiError> {
-    let date = dob.into_inner();
-    let patient_service = PatientService::new();
-    patient_service.get_patient_by_dob(&date)
-        .await
-        .map(Json)
-        .map_err(|e| ApiError::PatientNotFound(format!("dob={}: {}", date, e)))
-}
-
-#[post("/", data="<user_id>")]
-async fn get_user_by_id(user_id: Json<String>) -> Result<Json<Vec<User>>, ApiError> {
-    let id = user_id.into_inner();
-    let user_service = UserService::new();
-    user_service.get_user_by_id(&id)
-        .await
-        .map(Json)
-        .map_err(|e| ApiError::UserNotFound(format!("id={}: {}", id, e)))
-}
-
-#[post("/", data="<user_email>")]
-async fn get_user_by_email(user_email: Json<String>) -> Result<Json<Vec<User>>, ApiError> {
-    let email = user_email.into_inner();
-    let user_service = UserService::new();
-    user_service.get_user_by_email(&email)
-        .await
-        .map(Json)
-        .map_err(|e| ApiError::UserNotFound(format!("email={}: {}", email, e)))
-}
-
-#[post("/", data="<name>")]
-async fn get_user_by_name(name: Json<Name>) -> Result<Json<Vec<User>>, ApiError> {
-    let user_service = UserService::new();
-    user_service.get_user_by_name(&name.first_name, &name.last_name)
-        .await
-        .map(Json)
-        .map_err(|e| ApiError::UserNotFound(format!("{} {}: {}", name.first_name, name.last_name, e)))
-}
-
 // Register a catcher for unhandled errors
 #[catch(404)]
 fn not_found_catcher(req: &Request) -> content::RawHtml<String> {
@@ -330,12 +268,6 @@ async fn main() -> Result<(), rocket::Error> {
         .mount("/genes/symbols", routes![get_gene_symbols])
         .mount("/genes/coordinates", routes![get_coordinates])
         .mount("/search", routes![search_features])
-        .mount("/patients", routes![get_patient_by_id])
-        .mount("/patients/name", routes![get_patient_by_name])
-        .mount("/patients/dob", routes![get_patient_by_dob])
-        .mount("/users", routes![get_user_by_id])
-        .mount("/users/email", routes![get_user_by_email])
-        .mount("/users/name", routes![get_user_by_name])
         .mount("/files", routes![list_dir])
         .register("/", catchers![not_found_catcher])
         .launch()
