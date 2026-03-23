@@ -10,7 +10,6 @@ documentation = "https://github.com/docwarren/soma-rs"
 
 [features]
 default = []
-mongo = ["dep:mongodb"]
 sqlite = []
 
 [dependencies]
@@ -18,7 +17,6 @@ http = "1.3.1"
 tokio = { version ="1.44.2", features = ["full"] }
 url = "2.5.4"
 aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
-mongodb = { version = "3.2.3", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
 futures = "0.3.31"
 flate2 = "1.1.1"
