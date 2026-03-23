@@ -20,11 +20,10 @@ use thiserror::Error;
 use soma_core::models::FileSearchRequest;
 use soma_core::models::gene_coordinate::GeneCoordinate;
 use soma_core::services::search::{ SearchError, SearchService };
-use crate::{search::models::SearchRequest};
+use crate::search::models::SearchRequest;
 
 pub mod search;
 
-/// File entry with metadata - matches Tauri's FileEntry struct
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileEntry {
@@ -33,7 +32,6 @@ pub struct FileEntry {
     pub size: u64,
 }
 
-/// JSON error response sent to clients
 #[derive(Serialize)]
 pub struct ErrorResponse {
     pub error: String,
@@ -141,13 +139,10 @@ async fn search_features(search_request: Json<SearchRequest>) -> Result<String, 
     let search_options = get_search_options(search_request)?;
     let result = SearchService::search_features(&search_options).await?;
 
-    Ok(result.lines
-    .into_iter()
-    .collect::<Vec<String>>()
-    .join("\n"))
+    Ok(result.lines.into_iter().collect::<Vec<String>>().join("\n"))
 }
 
-#[post("/", data="<dir_path>")]
+#[post("/", data = "<dir_path>")]
 async fn list_dir(dir_path: Json<String>) -> Result<Json<Vec<FileEntry>>, ApiError> {
     let dir = dir_path.into_inner();
 
@@ -173,10 +168,8 @@ async fn list_dir(dir_path: Json<String>) -> Result<Json<Vec<FileEntry>>, ApiErr
 #[get("/<genome>")]
 async fn get_gene_symbols(genome: &str) -> Result<Json<Vec<String>>, ApiError> {
     let url = format!("./data/{}-genes.db", genome.to_lowercase());
-
     let connection = genes::establish_connection(url.clone())
         .map_err(|e| ApiError::DatabaseError(format!("Failed to open {}: {}", url, e)))?;
-
     let symbols = genes::get_gene_symbols(&connection)?;
     Ok(Json(symbols))
 }
@@ -184,73 +177,34 @@ async fn get_gene_symbols(genome: &str) -> Result<Json<Vec<String>>, ApiError> {
 #[get("/<genome>/<gene>")]
 async fn get_coordinates(gene: &str, genome: &str) -> Result<Json<GeneCoordinate>, ApiError> {
     let url = format!("./data/{}-genes.db", genome.to_lowercase());
-
     let connection = genes::establish_connection(url.clone())
         .map_err(|e| ApiError::DatabaseError(format!("Failed to open {}: {}", url, e)))?;
-
     let coord = genes::get_gene_coordinates(&connection, gene)?;
     Ok(Json(coord))
 }
 
-// Register a catcher for unhandled errors
 #[catch(404)]
 fn not_found_catcher(req: &Request) -> content::RawHtml<String> {
     content::RawHtml(format!("<p>404: Not Found - {}</p>", req.uri()))
 }
 
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
-
-    let aws_access_key = std::env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID not found in environment");
-    let aws_secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").expect("AWS_SECRET_ACCESS_KEY not found in environment");
-    let aws_region = std::env::var("AWS_REGION").expect("AWS_REGION not found in environment");
-    let s3_bucket = std::env::var("S3_BUCKET").expect("S3_BUCKET not found in environment");
-
-    let azure_storage_container = std::env::var("AZURE_STORAGE_CONTAINER").expect("AZURE_STORAGE_CONTAINER not found in environment");
-    let azure_storage_account = std::env::var("AZURE_STORAGE_ACCOUNT").expect("AZURE_STORAGE_ACCOUNT not found in environment");
-    let azure_storage_access_key = std::env::var("AZURE_STORAGE_ACCESS_KEY").expect("AZURE_STORAGE_ACCESS_KEY not found in environment");
-
-    let google_service_account = std::env::var("GOOGLE_SERVICE_ACCOUNT").expect("GOOGLE_SERVICE_ACCOUNT not found in environment");
-    let google_bucket = std::env::var("GOOGLE_BUCKET").expect("GOOGLE_BUCKET not found in environment");
-
-    let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY not found in environment");
-
-    unsafe {
-        std::env::set_var("AWS_SECRET_ACCESS_KEY", aws_secret_key);
-        std::env::set_var("AWS_ACCESS_KEY_ID", aws_access_key);
-        std::env::set_var("AWS_REGION", aws_region);
-        std::env::set_var("S3_BUCKET", s3_bucket);
-
-        std::env::set_var("AZURE_STORAGE_CONTAINER", azure_storage_container);
-        std::env::set_var("AZURE_STORAGE_ACCOUNT", azure_storage_account);
-        std::env::set_var("AZURE_STORAGE_ACCESS_KEY", azure_storage_access_key);
-
-        std::env::set_var("GOOGLE_SERVICE_ACCOUNT", google_service_account);
-        std::env::set_var("GOOGLE_BUCKET", google_bucket);
-
-        std::env::set_var("ANTHROPIC_API_KEY", anthropic_api_key);
-    }
-
-
-    let allowed_urls: AllowedOrigins = AllowedOrigins::some_regex(&[
-        "http://localhost:5173".to_string()
-    ]);
+pub fn rocket() -> rocket::Rocket<rocket::Build> {
+    let allowed_urls = AllowedOrigins::some_regex(&["http://localhost:5173".to_string()]);
 
     let methods = [
         Method::from(rocket::http::Method::Get),
-        Method::from(rocket::http::Method::Post)
+        Method::from(rocket::http::Method::Post),
     ];
     let allowed_methods: HashSet<Method> = HashSet::from(methods);
+    let allowed_headers = AllowedHeaders::some(&["Authorization", "Content-Type"]);
 
-    let allowed_headers: AllowedHeaders = AllowedHeaders::some(&["Authorization", "Content-Type"]);
-
-    let cors_options: CorsOptions = CorsOptions::default()
+    let cors = CorsOptions::default()
         .allowed_origins(allowed_urls)
         .allowed_methods(allowed_methods)
         .allowed_headers(allowed_headers)
-        .allow_credentials(true);
-
-    let cors = cors_options.to_cors().expect("Failed to created cors options");
+        .allow_credentials(true)
+        .to_cors()
+        .expect("Failed to create CORS options");
 
     rocket::build()
         .attach(cors)
@@ -260,7 +214,93 @@ async fn main() -> Result<(), rocket::Error> {
         .mount("/search", routes![search_features])
         .mount("/files", routes![list_dir])
         .register("/", catchers![not_found_catcher])
-        .launch()
-        .await?;
+}
+
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
+    rocket().launch().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rocket;
+    use rocket::http::{ContentType, Status};
+    use rocket::local::asynchronous::Client;
+
+    async fn client() -> Client {
+        Client::tracked(rocket()).await.expect("valid rocket instance")
+    }
+
+    #[rocket::async_test]
+    async fn test_index() {
+        let client = client().await;
+        let response = client.get("/").dispatch().await;
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.into_string().await.unwrap(), "Hello world");
+    }
+
+    #[rocket::async_test]
+    async fn test_search_unsupported_file_type() {
+        let client = client().await;
+        let response = client.post("/search")
+            .header(ContentType::JSON)
+            .body(r#"{"path": "s3://bucket/file.txt", "coordinates": "chr1:1-1000", "limit": 100}"#)
+            .dispatch().await;
+        assert_eq!(response.status(), Status::BadRequest);
+    }
+
+    #[rocket::async_test]
+    async fn test_search_missing_coordinates() {
+        let client = client().await;
+        let response = client.post("/search")
+            .header(ContentType::JSON)
+            .body(r#"{"path": "s3://bucket/file.vcf.gz", "coordinates": "", "limit": 100}"#)
+            .dispatch().await;
+        assert_eq!(response.status(), Status::BadRequest);
+    }
+
+    #[rocket::async_test]
+    async fn test_search_invalid_json() {
+        let client = client().await;
+        let response = client.post("/search")
+            .header(ContentType::JSON)
+            .body(r#"not json"#)
+            .dispatch().await;
+        assert_eq!(response.status(), Status::BadRequest);
+    }
+
+    #[rocket::async_test]
+    async fn test_404() {
+        let client = client().await;
+        let response = client.get("/nonexistent").dispatch().await;
+        assert_eq!(response.status(), Status::NotFound);
+    }
+
+    #[rocket::async_test]
+    async fn test_search_vcf() {
+        let client = client().await;
+        let response = client.post("/search")
+            .header(ContentType::JSON)
+            .body(r#"{"path": "s3://com.gmail.docarw/test_data/NA12877.EVA.vcf.gz", "coordinates": "chr1:116549-116549", "limit": 100}"#)
+            .dispatch().await;
+        assert_eq!(response.status(), Status::Ok);
+        let body = response.into_string().await.unwrap();
+        assert!(body.contains("chr1\t116549"));
+        soma_core::indexes::index_cache::delete_local_index(
+            "s3://com.gmail.docarw/test_data/NA12877.EVA.vcf.gz", ".tbi"
+        );
+    }
+
+    #[rocket::async_test]
+    async fn test_list_files_s3() {
+        let client = client().await;
+        let response = client.post("/files")
+            .header(ContentType::JSON)
+            .body(r#""s3://com.gmail.docarw/test_data/""#)
+            .dispatch().await;
+        assert_eq!(response.status(), Status::Ok);
+        let body = response.into_string().await.unwrap();
+        assert!(body.contains("NA12877"));
+    }
 }
