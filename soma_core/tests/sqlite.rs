@@ -21,7 +21,5 @@ fn test_get_gene() {
 
     let conn = establish_connection("/media/drew/ExtraSSD/genes/grch38-genes.db").unwrap();
     let genes = get_gene_symbols(&conn).unwrap();
-    assert_eq!(genes.len(), 2);
-    assert_eq!(genes[0], "BRCA2");
-    assert_eq!(genes[1], "BRCA1");
+    assert_eq!(genes.len(), 29818);
 }

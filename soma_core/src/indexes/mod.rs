@@ -10,3 +10,4 @@ pub mod bai;
 pub mod fai;
 pub mod bigwig;
 pub mod traits;
+pub mod index_cache;

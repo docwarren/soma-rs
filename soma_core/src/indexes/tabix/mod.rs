@@ -8,7 +8,6 @@ use crate::indexes::chunk::{Chunk, ChunkError};
 use crate::indexes::bin;
 use crate::indexes::virtual_offset::VirtualOffset;
 use crate::stores::error::StoreError;
-use crate::stores::StoreService;
 
 use super::bai::chr_idx::ChrIdx;
 use super::traits::sam_index::SamIndex;
@@ -75,9 +74,25 @@ impl Tabix {
     }
 
     pub async fn from_compressed_file(idx_path: &str) -> Result<Self, TabixError> {
-        let bytes = StoreService::from_uri(idx_path)?
-            .get_object(idx_path)
-            .await?;
+        let bytes = crate::indexes::index_cache::get_or_download_index(
+            idx_path,
+            ".tbi",
+            idx_path
+        ).await?;
+        Ok(Tabix::from_compressed_bytes(bytes)?)
+    }
+
+    /// Creates a Tabix index from a compressed file with explicit data file path for better cache naming.
+    ///
+    /// # Arguments
+    /// * `idx_path` - Path to the index file (could be remote)
+    /// * `data_file_path` - Path to the data file (used for cache naming)
+    pub async fn from_compressed_file_with_data_path(idx_path: &str, data_file_path: &str) -> Result<Self, TabixError> {
+        let bytes = crate::indexes::index_cache::get_or_download_index(
+            idx_path,
+            ".tbi",
+            data_file_path
+        ).await?;
         Ok(Tabix::from_compressed_bytes(bytes)?)
     }
 

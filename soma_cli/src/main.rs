@@ -36,6 +36,10 @@ enum Commands {
         /// The format should be "chr:start-end" or "chr:position"
         coordinates: String,
 
+        /// Reference genome build (hg38 or hg19)
+        #[arg(short = 'r', long)]
+        reference: Option<String>,
+
         // Include the header in the output
         #[arg(short)]
         with_header: Option<bool>,
@@ -88,10 +92,11 @@ async fn main() {
         Commands::Search {
             file,
             coordinates,
+            reference,
             with_header,
             only_header,
-        } => {            
-            
+        } => {
+
             let file_path = format_file_path(&file).unwrap_or_else(|e| {
                 print_error(&format!("Failed to format file path ({:?})", &file), &e);
                 std::process::exit(1);
@@ -102,10 +107,25 @@ async fn main() {
                 std::process::exit(1);
             });
 
+            // Validate reference genome if provided
+            if let Some(ref genome) = reference {
+                let genome_lower = genome.to_lowercase();
+                if genome_lower != "hg38" && genome_lower != "hg19" {
+                    eprintln!("Error: Invalid reference genome '{}'. Allowed values: hg38, hg19", genome);
+                    std::process::exit(1);
+                }
+            }
+
             let mut options = SearchOptions::new()
                 .set_file_path(&file_path)
-                .set_index_path(&index_path)
-                .set_coordinates(&coordinates);
+                .set_index_path(&index_path);
+
+            // Set genome before coordinates so set_coordinates can use it
+            if let Some(ref genome) = reference {
+                options = options.set_genome(genome);
+            }
+
+            options = options.set_coordinates(&coordinates);
 
             let output_format = get_output_format(&file_path).unwrap_or_else(|e| {
                 print_error(&format!("Failed to get output format ({})", &file_path), &e);

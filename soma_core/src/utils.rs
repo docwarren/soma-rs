@@ -178,14 +178,14 @@ fn test_get_search_options_local() {
     let options = get_search_options(request).unwrap();
     assert_eq!(
         options.file_path,
-        "file:///home/drew/dev/seqa23/soma_core/mock_data/NA12878.gatk.cnv.vcf.gz"
+        "file:///home/drew/dev/soma-rs/soma_core/mock_data/NA12878.gatk.cnv.vcf.gz"
     );
     assert_eq!(options.chromosome, "chr1");
     assert_eq!(options.begin, 1000);
     assert_eq!(options.end, 2000);
     assert_eq!(
         options.index_path,
-        "file:///home/drew/dev/seqa23/soma_core/mock_data/NA12878.gatk.cnv.vcf.gz.tbi"
+        "file:///home/drew/dev/soma-rs/soma_core/mock_data/NA12878.gatk.cnv.vcf.gz.tbi"
     );
     assert_eq!(options.output_format, OutputFormat::VCF);
 

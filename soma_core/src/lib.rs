@@ -10,6 +10,3 @@ pub mod services;
 
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
-
-#[cfg(feature = "mongo")]
-pub mod mongo;

@@ -7,7 +7,6 @@ use crate::indexes::bin::Bin;
 use crate::indexes::chunk::{Chunk, ChunkError};
 use super::traits::sam_index::SamIndex;
 use super::virtual_offset::VirtualOffset;
-use crate::stores::StoreService;
 
 pub mod chr_idx;
 
@@ -51,8 +50,25 @@ impl BaiIndex {
     }
 
     pub async fn from_file(idx_path: &str) -> Result<Self, BaiError> {
-        let store_service = StoreService::from_uri(&idx_path)?;
-        let bytes = store_service.get_object(&idx_path).await?;
+        let bytes = crate::indexes::index_cache::get_or_download_index(
+            idx_path,
+            ".bai",
+            idx_path
+        ).await?;
+        BaiIndex::from_bytes(bytes)
+    }
+
+    /// Creates a BaiIndex from a file with explicit data file path for better cache naming.
+    ///
+    /// # Arguments
+    /// * `idx_path` - Path to the index file (could be remote)
+    /// * `data_file_path` - Path to the data file (used for cache naming)
+    pub async fn from_file_with_data_path(idx_path: &str, data_file_path: &str) -> Result<Self, BaiError> {
+        let bytes = crate::indexes::index_cache::get_or_download_index(
+            idx_path,
+            ".bai",
+            data_file_path
+        ).await?;
         BaiIndex::from_bytes(bytes)
     }
 
