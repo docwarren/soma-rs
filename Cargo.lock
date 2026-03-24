@@ -2719,7 +2719,7 @@ dependencies = [
 
 [[package]]
 name = "soma_core"
-version = "2.1.0"
+version = "1.0.0"
 dependencies = [
  "flate2",
  "futures",
