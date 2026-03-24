@@ -1,4 +1,4 @@
-# soma-rs
+# seqa-rs
 
 (Early release. Needs more thorough testing on a wide variety of files, as I have a limited test set.)
 
@@ -10,9 +10,9 @@ Supports BAM, VCF, GFF/GTF, BED, BedGraph, BigWig, BigBed, and FASTA formats. In
 
 | Crate | Description | README |
 |-------|-------------|--------|
-| [`soma_core`](soma_core/) | Core library — genomic file parsing, binary index reading, cloud storage via `object_store` | [soma_core/README.md](soma_core/README.md) |
-| [`seqa`](soma_cli/) | CLI tool — query any supported file from the command line | [soma_cli/README.md](soma_cli/README.md) |
-| [`soma_rocket`](soma_rocket/) | REST API server — HTTP endpoints for genomic search and file browsing | [soma_rocket/README.md](soma_rocket/README.md) |
+| [`seqa_core`](seqa_core/) | Core library — genomic file parsing, binary index reading, cloud storage via `object_store` | [seqa_core/README.md](seqa_core/README.md) |
+| [`seqa`](seqa_cli/) | CLI tool — query any supported file from the command line | [seqa_cli/README.md](seqa_cli/README.md) |
+| [`seqa_rocket`](seqa_rocket/) | REST API server — HTTP endpoints for genomic search and file browsing | [seqa_rocket/README.md](seqa_rocket/README.md) |
 
 ## Storage Backends
 
@@ -37,21 +37,21 @@ seqa search /path/to/sample.vcf.gz chr1:1000000-2000000
 seqa search s3://my-bucket/sample.bam chr12:10000000-10010000
 
 # Run the API server
-cargo run -p soma_rocket
+cargo run -p seqa_rocket
 ```
 
 ## Development
 
 ```bash
 # Run unit tests (no credentials needed)
-cargo test -p soma_core --lib
-cargo test -p soma_core --test read
+cargo test -p seqa_core --lib
+cargo test -p seqa_core --test read
 
 # Run cloud integration tests (requires credentials)
-cargo test -p soma_core --test bam
-cargo test -p soma_core --test tabix
-cargo test -p soma_core --test bigwig
-cargo test -p soma_core --test bigbed
+cargo test -p seqa_core --test bam
+cargo test -p seqa_core --test tabix
+cargo test -p seqa_core --test bigwig
+cargo test -p seqa_core --test bigbed
 ```
 
 See individual crate READMEs for credential setup.

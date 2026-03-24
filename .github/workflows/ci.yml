@@ -25,21 +25,21 @@ jobs:
         run: cargo build
 
       - name: Unit tests
-        run: cargo test -p soma_core --lib
+        run: cargo test -p seqa_core --lib
 
       - name: Read / CIGAR tests
-        run: cargo test -p soma_core --test read
+        run: cargo test -p seqa_core --test read
 
       - name: Local store test
-        run: cargo test -p soma_core --test local
+        run: cargo test -p seqa_core --test local
 
       - name: Rocket tests
         run: |
-          cargo test -p soma_rocket test_index
-          cargo test -p soma_rocket test_search_unsupported_file_type
-          cargo test -p soma_rocket test_search_missing_coordinates
-          cargo test -p soma_rocket test_search_invalid_json
-          cargo test -p soma_rocket test_404
+          cargo test -p seqa_rocket test_index
+          cargo test -p seqa_rocket test_search_unsupported_file_type
+          cargo test -p seqa_rocket test_search_missing_coordinates
+          cargo test -p seqa_rocket test_search_invalid_json
+          cargo test -p seqa_rocket test_404
 
   # Runs on push to main only — requires cloud credentials
   integration:
@@ -63,15 +63,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: soma_core cloud tests
+      - name: seqa_core cloud tests
         run: |
-          cargo test -p soma_core --test bam
-          cargo test -p soma_core --test tabix
-          cargo test -p soma_core --test bigwig
-          cargo test -p soma_core --test bigbed
-          cargo test -p soma_core --test obj_store
+          cargo test -p seqa_core --test bam
+          cargo test -p seqa_core --test tabix
+          cargo test -p seqa_core --test bigwig
+          cargo test -p seqa_core --test bigbed
+          cargo test -p seqa_core --test obj_store
 
-      - name: soma_rocket cloud tests
+      - name: seqa_rocket cloud tests
         run: |
-          cargo test -p soma_rocket test_search_vcf
-          cargo test -p soma_rocket test_list_files_s3
+          cargo test -p seqa_rocket test_search_vcf
+          cargo test -p seqa_rocket test_list_files_s3
