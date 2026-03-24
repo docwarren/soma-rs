@@ -25,16 +25,16 @@ pub enum CigarFormat {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust
 /// use soma_core::api::search_options::SearchOptions;
 /// use soma_core::api::output_format::OutputFormat;
 ///
-/// let mut opts = SearchOptions::new();
+/// let mut opts = SearchOptions::new()
 ///     .set_file_path("s3://my-bucket/sample.bam".into())
-///     .set_index_path"s3://my-bucket/sample.bam.bai".into())
+///     .set_index_path("s3://my-bucket/sample.bam.bai".into())
 ///     .set_output_format(OutputFormat::BAM)
 ///     .set_genome("hg38")
-///     .set_coordinates("chr1:100000-200000")
+///     .set_coordinates("chr1:100000-200000");
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchOptions {
