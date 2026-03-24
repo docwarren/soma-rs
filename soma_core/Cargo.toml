@@ -8,9 +8,6 @@ description = "Object store support for vcf, bam, fasta, bigwig, bigbed, gff, be
 license = "GPL-3.0-only"
 repository = "https://github.com/docwarren/soma-rs"
 homepage = "https://www.seqa23.com"
-exclude = [
-    "mock_data/*",
-]
 
 [features]
 default = []
