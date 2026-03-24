@@ -245,7 +245,7 @@ mod tests {
         let client = client().await;
         let response = client.post("/search")
             .header(ContentType::JSON)
-            .body(r#"{"path": "s3://bucket/file.txt", "coordinates": "chr1:1-1000", "limit": 100}"#)
+            .body(r#"{"path": "s3://bucket/file.txt", "coordinates": "chr1:1-1000"}"#)
             .dispatch().await;
         assert_eq!(response.status(), Status::BadRequest);
     }
@@ -255,7 +255,7 @@ mod tests {
         let client = client().await;
         let response = client.post("/search")
             .header(ContentType::JSON)
-            .body(r#"{"path": "s3://bucket/file.vcf.gz", "coordinates": "", "limit": 100}"#)
+            .body(r#"{"path": "s3://bucket/file.vcf.gz", "coordinates": ""}"#)
             .dispatch().await;
         assert_eq!(response.status(), Status::BadRequest);
     }
@@ -282,7 +282,7 @@ mod tests {
         let client = client().await;
         let response = client.post("/search")
             .header(ContentType::JSON)
-            .body(r#"{"path": "s3://com.gmail.docarw/test_data/NA12877.EVA.vcf.gz", "coordinates": "chr1:116549-116549", "limit": 100}"#)
+            .body(r#"{"path": "s3://com.gmail.docarw/test_data/NA12877.EVA.vcf.gz", "coordinates": "chr1:116549-116549"}"#)
             .dispatch().await;
         assert_eq!(response.status(), Status::Ok);
         let body = response.into_string().await.unwrap();

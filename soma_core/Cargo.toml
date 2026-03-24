@@ -2,7 +2,7 @@
 name = "soma_core"
 version = "2.1.0"
 edition = "2024"
-description = "Object store support for vcf, bam, fasta, bigwig"
+description = "Object store support for vcf, bam, fasta, bigwig, bigbed, gff, bed, bedgraph, gtf"
 license = "GNU General Public License (GPL)"
 repository = "https://github.com/docwarren/soma-rs"
 homepage = "https://github.com/docwarren/soma-rs"

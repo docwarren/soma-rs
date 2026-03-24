@@ -3,21 +3,40 @@ use std::fmt::Display;
 
 use crate::traits::feature::Feature;
 
+/// A single record from a BED (Browser Extensible Data) file.
+///
+/// Supports the full 12-column BED specification plus any extra columns beyond
+/// column 12.  Columns 4–12 are optional; absent columns are represented as `None`.
+///
+/// Coordinates are **0-based half-open** `[begin, end)` as per the BED specification.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BedLine {
+    /// Column 1 — chromosome/contig name.
     pub chromosome: String,
+    /// Column 2 — 0-based start position of the feature.
     pub begin: u32,
+    /// Column 3 — exclusive end position of the feature.
     pub end: u32,
+    /// Column 4 — feature name/label (optional).
     pub name: Option<String>,
+    /// Column 5 — score in the range 0–1000 (optional).
     pub score: Option<u16>,
+    /// Column 6 — strand (`"+"` or `"-"`) (optional).
     pub strand: Option<String>,
+    /// Column 7 — thickStart: start of the "thick" drawing region (optional).
     pub thick_begin: Option<u32>,
+    /// Column 8 — thickEnd: end of the "thick" drawing region (optional).
     pub thick_end: Option<u32>,
+    /// Column 9 — itemRgb: RGB color string, e.g. `"255,0,0"` (optional).
     pub item_rgb: Option<String>,
+    /// Column 10 — number of blocks (exons) in the feature (optional).
     pub block_count: Option<u32>,
+    /// Column 11 — comma-separated list of block sizes (optional).
     pub block_sizes: Option<Vec<u32>>,
+    /// Column 12 — comma-separated list of block start positions relative to `begin` (optional).
     pub block_begins: Option<Vec<u32>>,
-    pub extra_fields: Option<String>,  // Any fields beyond the standard 12 BED columns
+    /// Any fields beyond the standard 12 BED columns, joined by tabs.
+    pub extra_fields: Option<String>,
 }
 
 impl BedLine {
@@ -37,6 +56,13 @@ impl BedLine {
         "block_begins"
     ];
 
+    /// Parses a single tab-delimited BED line into a [`BedLine`].
+    ///
+    /// At minimum the line must contain three fields (chrom, begin, end).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(String)` when a numeric field cannot be parsed.
     pub fn from_line(line: String) -> Result<BedLine, String> {
         let tokens = line.split('\t').collect::<Vec<&str>>();
         let chromosome = tokens[0].to_string();

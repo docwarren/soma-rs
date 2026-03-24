@@ -5,20 +5,44 @@ use crate::traits::feature::Feature;
 
 use super::constants::SnvType;
 
+/// A single record from a VCF (Variant Call Format) file.
+///
+/// Fields map directly to the standard VCF columns.  Multi-allelic sites are
+/// represented with multiple entries in [`VcfLine::alt_alleles`].
+///
+/// Coordinates are **1-based closed** as per the VCF specification.
+/// Use [`crate::traits::feature::Feature::to_canonical`] to convert to
+/// 0-based half-open for interval arithmetic.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VcfLine {
+    /// CHROM — chromosome/contig name.
     pub chromosome: String,
+    /// POS — 1-based position of the first base of the REF allele.
     pub position: u32,
+    /// ID — variant identifier (e.g. rsID), or `"."` if absent.
     pub id: String,
+    /// REF — reference allele sequence.
     pub ref_allele: String,
+    /// ALT — list of alternate allele sequences.
     pub alt_alleles: Vec<String>,
+    /// QUAL — Phred-scaled variant quality score, or `None` if the field was `"."`.
     pub quality: Option<f32>,
+    /// FILTER — list of filter labels (e.g. `["PASS"]`), or empty if the field was `"."`.
     pub filter: Vec<String>,
+    /// INFO — key/value pairs parsed from the INFO column.  Flag entries have an empty value.
     pub info: Vec<(String, String)>,
+    /// Per-sample genotype data, keyed by the FORMAT column fields.
+    /// `sample_data[i]` contains the field/value pairs for the *i*-th sample.
     pub sample_data: Vec<Vec<(String, String)>>,
 }
 
 impl VcfLine {
+    /// Parses a single tab-delimited VCF data line (not a header line) into a [`VcfLine`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(String)` when the line has fewer than 8 fields or contains
+    /// an unparseable position or quality value.
     pub fn from_line(line: String) -> Result<VcfLine, String> {
         let tokens = line.split('\t').collect::<Vec<&str>>();
         if tokens.len() < 8 {

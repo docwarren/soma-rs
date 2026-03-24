@@ -1,4 +1,6 @@
+/// Individual codec implementations used internally by the index parsers.
 pub mod gzip;
+/// BGZF (Blocked GZIP Format) used by BAM and bgzipped tabix files.
 pub mod bgzip;
 pub mod deflate;
 pub mod zlib;
@@ -6,6 +8,24 @@ pub mod zlib;
 use flate2::read::{GzDecoder, ZlibDecoder, DeflateDecoder};
 use std::io::Read;
 
+/// Decompresses `compressed_data` by inspecting the magic bytes to identify the format.
+///
+/// | Magic bytes | Format |
+/// |-------------|--------|
+/// | `0x1f 0x8b` | Gzip |
+/// | `0x78 {0x01,0x5e,0x9c,0xda}` | Zlib |
+/// | Everything else | Raw deflate (best-effort; falls back to returning the data unchanged) |
+///
+/// Bzip2 (`0x42 0x5a`), Zstd (`0x28 0xb5 0x2f 0xfd`), and XZ/LZMA formats are
+/// recognised but not supported — an error is returned for those.
+///
+/// If `compressed_data` is shorter than 2 bytes, or raw-deflate decoding fails,
+/// the input is returned unchanged (assumed to be uncompressed).
+///
+/// # Errors
+///
+/// Returns an error when an unsupported compression format is detected, or when
+/// a supported decompressor encounters a malformed stream.
 pub fn decompress_auto(compressed_data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
    if compressed_data.len() < 2 {
        return Ok(compressed_data.to_vec());

@@ -10,6 +10,9 @@ use crate::api::{bam_search, bigwig_search, fasta_search, tabix_search, bigbed_s
 use crate::utils::UtilError;
 use thiserror::Error;
 
+/// Unified error returned by [`SearchService::search_features`].
+///
+/// Each variant wraps the format-specific error from the underlying search function.
 #[derive(Debug, Error)]
 pub enum SearchError {
     #[error("Search Error: {0}")]
@@ -34,6 +37,21 @@ pub enum SearchError {
     Util(#[from] UtilError),
 }
 
+/// Entry point for format-agnostic genomic region queries.
+///
+/// `SearchService` dispatches to the appropriate format-specific search function
+/// based on [`SearchOptions::output_format`].  It does not hold any state; all
+/// methods are `async` free functions.
+///
+/// # Supported formats
+///
+/// | [`OutputFormat`] | Underlying function |
+/// |------------------|---------------------|
+/// | `BAM` | [`crate::api::bam_search::bam_search`] |
+/// | `BIGWIG` | [`crate::api::bigwig_search::bigwig_search`] |
+/// | `BIGBED` | [`crate::api::bigbed_search::bigbed_search`] |
+/// | `VCF`, `BED`, `BEDGRAPH`, `GFF`, `GTF` | [`crate::api::tabix_search::tabix_search`] |
+/// | `FASTA` | [`crate::api::fasta_search::fasta_search`] |
 pub struct SearchService;
 impl SearchService {
     /// Searches for features in a file based on the provided search request.

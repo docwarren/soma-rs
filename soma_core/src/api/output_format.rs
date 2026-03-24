@@ -7,21 +7,51 @@ use crate::traits::feature::Feature;
 use crate::models::gff::GffLine;
 use crate::models::gtf::GtfLine;
 
+/// The genomic file format being queried.
+///
+/// `OutputFormat` controls which index parser and record model are used during a search.
+/// It is usually inferred automatically from the file extension via
+/// [`crate::utils::get_output_format`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OutputFormat {
+    /// Binary Alignment Map — requires a companion `.bai` index.
     BAM,
+    /// FASTA sequence file — requires a companion `.fai` index.
     FASTA,
+    /// Variant Call Format (bgzipped + tabix-indexed `.vcf.gz`).
     VCF,
+    /// Browser Extensible Data (bgzipped + tabix-indexed `.bed.gz`, or plain `.bed`).
     BED,
+    /// BedGraph signal track (bgzipped + tabix-indexed `.bedgraph.gz`).
     BEDGRAPH,
+    /// BigWig signal track — index is embedded in the file.
     BIGWIG,
+    /// BigBed annotation track — index is embedded in the file.
     BIGBED,
+    /// General Feature Format v3 (bgzipped + tabix-indexed `.gff.gz`).
     GFF,
+    /// Gene Transfer Format (bgzipped + tabix-indexed `.gtf.gz`).
     GTF,
+    /// Raw string output; no format-specific parsing is applied.
     STRING
 }
 
 impl OutputFormat {
+    /// Parses a format name string (case-insensitive) into an [`OutputFormat`] variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(String)` when `format` does not match any known format name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use soma_core::api::output_format::OutputFormat;
+    ///
+    /// assert_eq!(OutputFormat::from_str("bam").unwrap(), OutputFormat::BAM);
+    /// assert_eq!(OutputFormat::from_str("VCF").unwrap(), OutputFormat::VCF);
+    /// assert!(OutputFormat::from_str("unknown").is_err());
+    /// ```
     pub fn from_str(format: &str) -> Result<OutputFormat, String> {
         match format.to_lowercase().as_str() {
             "bam" => Ok(OutputFormat::BAM),
@@ -38,6 +68,12 @@ impl OutputFormat {
         }
     }
 
+    /// Returns the record-parsing function for this format.
+    ///
+    /// The returned function parses a single tab-delimited text line into a
+    /// boxed [`crate::traits::feature::Feature`].  Only text-based tabix formats
+    /// (VCF, BED, BedGraph, GFF, GTF) are supported; all other variants return a
+    /// function that always errors with "Unsupported output format".
     pub fn get_model(&self) -> fn(&str) -> Result<Box<dyn Feature>, String> {
         match self {
             OutputFormat::VCF => vcf_from_line,

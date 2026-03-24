@@ -6,6 +6,7 @@ use std::num::ParseIntError;
 use std::path::absolute;
 use thiserror::Error;
 
+/// Top-level error type returned by the utility functions in this module.
 #[derive(Debug, Error)]
 pub enum UtilError {
     #[error("{0}")]
@@ -18,6 +19,7 @@ pub enum UtilError {
     AbsolutePathError(#[from] std::io::Error),
 }
 
+/// Errors related to invalid coordinate strings or search option values.
 #[derive(Debug, Error)]
 pub enum FormatError {
     #[error("Invalid options format: {0}")]
@@ -30,6 +32,7 @@ pub enum FormatError {
     ParseIntError(#[from] ParseIntError),
 }
 
+/// Errors related to inferring index paths or output formats from file extensions.
 #[derive(Debug, Error)]
 pub enum ExtensionError {
     #[error("Error determining index path: {0}")]
@@ -39,6 +42,15 @@ pub enum ExtensionError {
     PathTypeError(String),
 }
 
+/// Normalises a file path to a URI accepted by [`crate::stores::StoreService`].
+///
+/// - Cloud/HTTP URIs (`s3://`, `gs://`, `az://`, `http://`, …) are returned unchanged.
+/// - Bare local paths (`/`, `./`, `../`) are resolved to an absolute path and
+///   prefixed with `file://`.  An error is returned if the file does not exist.
+///
+/// # Errors
+///
+/// Returns [`UtilError`] when a local path does not exist or cannot be canonicalised.
 pub fn format_file_path(file_path: &str) -> Result<String, UtilError> {
     if file_path.starts_with("/") || file_path.starts_with("./") || file_path.starts_with("../") {
         match std::fs::exists(file_path) {
@@ -57,6 +69,20 @@ pub fn format_file_path(file_path: &str) -> Result<String, UtilError> {
     }
 }
 
+/// Converts a [`FileSearchRequest`] into a fully resolved [`SearchOptions`].
+///
+/// This function:
+/// 1. Validates that `path` and `coordinates` are non-empty.
+/// 2. Parses the coordinate string via [`parse_coordinates`].
+/// 3. Normalises the file path via [`format_file_path`].
+/// 4. Infers the index path via [`get_index_path`].
+/// 5. Infers the output format via [`get_output_format`].
+/// 6. Copies any pre-parsed index/header caches from the request.
+///
+/// # Errors
+///
+/// Returns [`UtilError`] when validation, path normalisation, coordinate parsing,
+/// or format inference fails.
 pub fn get_search_options(request: FileSearchRequest) -> Result<SearchOptions, UtilError> {
     // Validate and process the search request
     if request.path.is_empty() || request.coordinates.is_empty() {
@@ -82,6 +108,18 @@ pub fn get_search_options(request: FileSearchRequest) -> Result<SearchOptions, U
     Ok(options)
 }
 
+/// Parses a genomic coordinate string into `(chromosome, begin, end)`.
+///
+/// Accepted formats:
+/// - `"chr1"` — whole chromosome; `begin` = 1, `end` = chromosome's maximum length.
+/// - `"chr1:1000"` — single-base query; `end` = `begin`.
+/// - `"chr1:1000-2000"` — explicit range.
+/// - Commas in numbers are stripped (e.g. `"chr1:1,000-2,000"`).
+///
+/// # Errors
+///
+/// Returns [`FormatError`] when the chromosome name is not recognised or a
+/// numeric field cannot be parsed.
 pub fn parse_coordinates(coords: &str) -> Result<(String, u32, u32), FormatError> {
     let longest_genome = get_longest_possible_genome();
     let tokens: Vec<&str> = coords.split(':').collect();
@@ -110,6 +148,18 @@ pub fn parse_coordinates(coords: &str) -> Result<(String, u32, u32), FormatError
     Ok((chromosome, begin, end))
 }
 
+/// Infers the companion index URI from a genomic file URI.
+///
+/// | Extension | Index path |
+/// |-----------|------------|
+/// | `.bam` | `<file>.bai` |
+/// | `.fa`, `.fasta` | `<file>.fai` |
+/// | `.bigwig`, `.bw`, `.bigbed`, `.bb` | `"-"` (embedded index) |
+/// | `.vcf.gz`, `.gff.gz`, `.bed.gz`, `.gtf.gz`, `.bedgraph.gz`, `.bed` | `<file>.tbi` |
+///
+/// # Errors
+///
+/// Returns [`ExtensionError`] when the extension is not in the list above.
 pub fn get_index_path(file_path: &str) -> Result<String, ExtensionError> {
     let lower_path = file_path.to_ascii_lowercase();
     // Logic to determine the index path based on the file type
@@ -136,6 +186,11 @@ pub fn get_index_path(file_path: &str) -> Result<String, ExtensionError> {
     }
 }
 
+/// Infers the [`OutputFormat`] from a file URI's extension.
+///
+/// # Errors
+///
+/// Returns [`ExtensionError`] when the extension does not match any known format.
 pub fn get_output_format(file_path: &str) -> Result<OutputFormat, ExtensionError> {
     let lower_path = file_path.to_ascii_lowercase();
     // Logic to determine the output format based on the file type

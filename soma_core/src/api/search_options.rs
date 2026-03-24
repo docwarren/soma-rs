@@ -16,28 +16,75 @@ pub enum CigarFormat {
     Merged,
 }
 
+/// Configuration for a genomic region search.
+///
+/// Build a `SearchOptions` with [`SearchOptions::new`] and the setter methods, or set
+/// fields directly.  Pass the finished value to
+/// [`crate::services::search::SearchService::search_features`] or to one of the
+/// format-specific search functions in [`crate::api`].
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use soma_core::api::search_options::SearchOptions;
+/// use soma_core::api::output_format::OutputFormat;
+///
+/// let mut opts = SearchOptions::new();
+/// opts.file_path = "s3://my-bucket/sample.bam".into();
+/// opts.index_path = "s3://my-bucket/sample.bam.bai".into();
+/// opts.output_format = OutputFormat::BAM;
+/// opts.set_genome("hg38");
+/// opts.set_coordinates("chr1:100000-200000");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchOptions {
+    /// URI of the genomic data file (local `file://`, `s3://`, `az://`, `gs://`, `http(s)://`).
     pub file_path: String,
+    /// URI of the companion index file.  Set to `"-"` for self-indexed formats
+    /// (BigWig, BigBed).
     pub index_path: String,
+    /// Chromosome / contig name (e.g. `"chr1"` or `"1"`).
     pub chromosome: String,
+    /// Query begin position (0-based).
     pub begin: u32,
+    /// Query end position (exclusive, 0-based half-open).
     pub end: u32,
+    /// Optional reference genome build (e.g. `"hg38"`, `"hg19"`).
+    /// When set, chromosome lengths are resolved from that build instead of
+    /// the longest known length across all supported builds.
     pub genome: Option<String>,
+    /// File format of [`SearchOptions::file_path`].
     pub output_format: OutputFormat,
+    /// Whether to include the file header lines in [`crate::api::search_result::SearchResult::lines`].
+    /// Defaults to `true`.
     pub include_header: bool,
+    /// When `true`, return only header lines and skip data records.
+    /// Defaults to `false`.
     pub header_only: bool,
+    /// Controls how CIGAR strings are rendered in BAM/SAM output.
     pub cigar_format: CigarFormat,
+    /// Pre-parsed BigWig index; supply to avoid re-downloading on repeated queries.
     pub bigwig_index: Option<BigwigIndex>,
-    pub bigbed_index: Option<BigwigIndex>,  // BigBed uses same index structure as BigWig
+    /// Pre-parsed BigBed index; supply to avoid re-downloading on repeated queries.
+    /// BigBed shares the same index structure as BigWig.
+    pub bigbed_index: Option<BigwigIndex>,
+    /// Pre-parsed BAM index; supply to avoid re-downloading on repeated queries.
     pub bam_index: Option<BaiIndex>,
+    /// Pre-parsed BAM header; supply to avoid re-downloading on repeated queries.
     pub bam_header: Option<BamHeader>,
+    /// Pre-parsed tabix index; supply to avoid re-downloading on repeated queries.
     pub tabix_index: Option<Tabix>,
+    /// Pre-parsed tabix header; supply to avoid re-downloading on repeated queries.
     pub tabix_header: Option<TabixHeader>,
+    /// Pre-parsed FASTA index; supply to avoid re-downloading on repeated queries.
     pub fasta_index: Option<FaiIndex>
 }
 
 impl SearchOptions {
+    /// Creates a `SearchOptions` with sensible defaults.
+    ///
+    /// All path/chromosome fields are empty strings; `include_header` is `true`,
+    /// `header_only` is `false`, and `output_format` is [`OutputFormat::STRING`].
     pub fn new() -> Self {
         SearchOptions {
             file_path: String::new(),
@@ -60,21 +107,38 @@ impl SearchOptions {
         }
     }
 
+    /// Sets the CIGAR string rendering format for BAM output.
     pub fn set_cigar_format(&mut self, cigar_format: CigarFormat) -> Self {
         self.cigar_format = cigar_format;
         self.clone()
     }
 
+    /// Sets the URI of the genomic data file.
     pub fn set_file_path(&mut self, file_path: &str) -> Self {
         self.file_path = file_path.to_string();
         self.clone()
     }
 
+    /// Sets the URI of the companion index file.
     pub fn set_index_path(&mut self, index_path: &str) -> Self {
         self.index_path = index_path.to_string();
         self.clone()
     }
 
+    /// Parses a coordinate string and updates `chromosome`, `begin`, and `end`.
+    ///
+    /// Accepted formats (commas in numbers are stripped):
+    ///
+    /// | Input | Result |
+    /// |-------|--------|
+    /// | `"chr1"` | full chromosome (begin=1, end=chromosome length) |
+    /// | `"chr1:12000"` | single position (end = begin + 1) |
+    /// | `"chr1:12000-15000"` | explicit range |
+    /// | `"chr1:12,000-15,000"` | commas ignored |
+    ///
+    /// When no explicit end is given, the chromosome length is resolved from
+    /// [`SearchOptions::genome`] if set, otherwise from the longest known length
+    /// across all supported reference builds.
     pub fn set_coordinates(&mut self, coords: &str) -> Self {
         let string:String = coords.replace(",", "");
         let parts: Vec<&str> = string.split(':').collect();
@@ -122,37 +186,48 @@ impl SearchOptions {
         self.clone()
     }
 
+    /// Sets the chromosome/contig name directly without parsing a full coordinate string.
     pub fn set_chromosome(&mut self, chromosome: &str) -> Self {
         self.chromosome = chromosome.to_string();
         self.clone()
     }
 
+    /// Sets the reference genome build (stored in lowercase).
+    ///
+    /// Supported values: `"hg19"`, `"hg38"`, `"grch37"`, `"grch38"`.
+    /// Used by [`SearchOptions::set_coordinates`] to resolve chromosome lengths.
     pub fn set_genome(&mut self, genome: &str) -> Self {
         self.genome = Some(genome.to_lowercase());
         self.clone()
     }
 
+    /// Sets the query begin position (0-based).
     pub fn set_begin(&mut self, begin: u32) -> Self {
         self.begin = begin;
         self.clone()
     }
 
+    /// Sets the query end position (exclusive, 0-based half-open).
     pub fn set_end(&mut self, end: u32) -> Self {
         self.end = end;
         self.clone()
     }
 
+    /// Sets the output format by name (case-insensitive).
+    /// Falls back to [`OutputFormat::VCF`] if the name is unrecognised.
     pub fn set_output_format(&mut self, output_format: &str) -> Self {
         let format = output_format.to_lowercase();
         self.output_format = OutputFormat::from_str(&format).unwrap_or(OutputFormat::VCF);
         self.clone()
     }
 
+    /// Controls whether file header lines are included in the result.
     pub fn set_include_header(&mut self, include_header: bool) -> Self {
         self.include_header = include_header;
         self.clone()
     }
 
+    /// When `true`, only header lines are returned and data records are skipped.
     pub fn set_header_only(&mut self, header_only: bool) -> Self {
         self.header_only = header_only;
         self.clone()

@@ -5,5 +5,4 @@ use rocket::serde::{ Deserialize };
 pub struct SearchRequest {
     pub coordinates: String,
     pub path: String,
-    pub limit: u32
 }
