@@ -57,3 +57,14 @@ Cloud storage and database access require environment variables:
 ## Rust Edition
 
 All crates use **Rust edition 2024**.
+
+## Test Deletion Policy
+
+**Never delete a failing test** to make CI green. Before removing any test, you must:
+
+1. Identify every assertion and code path exercised by the test.
+2. Find an existing *passing* test that covers each of those cases — not just "similar" functionality, but the same inputs, the same code path, and equivalent assertions.
+3. If full coverage cannot be confirmed, mark the test `#[ignore]` with a comment explaining why (e.g., machine-specific path, missing credentials) rather than deleting it.
+4. Prefer moving credential-dependent tests to the integration test files (`tests/bam.rs`, `tests/tabix.rs`, etc.) over removing them.
+
+Silently dropping tests to unblock CI is not acceptable. It creates gaps that are hard to detect later.
