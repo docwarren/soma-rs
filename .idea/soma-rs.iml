@@ -6,6 +6,10 @@
       <sourceFolder url="file://$MODULE_DIR$/soma_core/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/soma_core/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/soma_rocket/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/seqa_cli/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/seqa_core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/seqa_core/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/seqa_rocket/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
