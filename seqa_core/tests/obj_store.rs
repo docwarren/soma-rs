@@ -14,7 +14,6 @@ async fn obj_store_gcs() {
     let gcs_path = "gs://genre_test_bucket/test.txt";
     let store = StoreService::from_uri(gcs_path).expect("Failed to create GCS store");
     let data = store.get_object(gcs_path).await.expect("Failed to get data from GCS store");
-    println!("Data from GCS store: {:?}", data);
     assert_eq!("Hello world".to_string(), String::from_utf8_lossy(&data));
 }
 

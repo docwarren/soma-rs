@@ -1,5 +1,6 @@
 use core::ops::Range;
 use futures::StreamExt;
+use log::info;
 use object_store::path::Path as ObjectStorePath;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreScheme, PutPayload};
 
@@ -210,7 +211,7 @@ impl StoreService {
             .put(&canonical_path, payload)
             .await
             .map_err(|e| StoreError::PutError(e.to_string()))?;
-        println!("success object put");
+        info!("success object put");
         Ok(())
     }
 
