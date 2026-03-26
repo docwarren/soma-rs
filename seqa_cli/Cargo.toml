@@ -1,6 +1,6 @@
 [package]
 name = "seqa"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]
@@ -9,3 +9,5 @@ command = "0.0.0"
 seqa_core = { path = "../seqa_core" }
 thiserror = "2.0.16"
 tokio = "1.47.0"
+log = "0.4.29"
+env_logger = "0.11.10"

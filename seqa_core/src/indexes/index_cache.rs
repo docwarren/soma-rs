@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use log::{debug, error};
 use crate::stores::{StoreService, error::StoreError};
 
 /// Determines the local cache path for an index file based on the data file path.
@@ -64,7 +65,7 @@ pub async fn get_or_download_index(
                 return Ok(bytes);
             }
             Err(e) => {
-                eprintln!("Warning: Failed to read local index {}: {}. Downloading from remote.",
+                debug!("Warning: Failed to read local index {}: {}. Downloading from remote.",
                     local_path.display(), e);
             }
         }
@@ -76,7 +77,7 @@ pub async fn get_or_download_index(
 
     // Try to cache the downloaded index locally
     if let Err(e) = cache_index_locally(&local_path, &bytes).await {
-        eprintln!("Warning: Failed to cache index locally at {}: {}",
+        error!("Warning: Failed to cache index locally at {}: {}",
             local_path.display(), e);
     } else {}
 
@@ -117,7 +118,7 @@ pub fn delete_local_index(data_file_path: &str, index_extension: &str) {
     let local_path = get_local_index_path(data_file_path, index_extension);
     if local_path.exists() {
         if let Err(e) = std::fs::remove_file(&local_path) {
-            eprintln!("Warning: Failed to delete cached index {}: {}", local_path.display(), e);
+            debug!("Warning: Failed to delete cached index {}: {}", local_path.display(), e);
         }
     }
 }

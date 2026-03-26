@@ -10,6 +10,7 @@ use seqa_core::api::tabix_search::{TabixSearchError, tabix_search};
 use seqa_core::utils::{format_file_path, get_index_path, get_output_format, ExtensionError};
 use std::io::{self, Write};
 use thiserror::Error;
+use log::{debug, error};
 
 
 #[derive(Parser, Debug)]
@@ -73,6 +74,8 @@ pub enum ApiError {
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(err) => {
@@ -103,7 +106,7 @@ async fn main() {
             if let Some(ref genome) = reference {
                 let genome_lower = genome.to_lowercase();
                 if genome_lower != "hg38" && genome_lower != "hg19" {
-                    eprintln!("Error: Invalid reference genome '{}'. Allowed values: hg38, hg19", genome);
+                    error!("Error: Invalid reference genome '{}'. Allowed values: hg38, hg19", genome);
                     std::process::exit(1);
                 }
             }
@@ -145,11 +148,11 @@ async fn main() {
                             // Handle broken pipe error gracefully
                             std::process::exit(0);
                         }
-                        Err(e) => eprintln!("Error writing output: {:?}", e),
+                        Err(e) => error!("Error writing output: {:?}", e),
                     }
                 }
                 Err(e) => {
-                    eprintln!("{:?}", e);
+                    debug!("{:?}", e);
                 }
             }
         }
@@ -157,8 +160,7 @@ async fn main() {
 }
 
 fn print_error(message: &str, e: &dyn std::error::Error) {
-    eprintln!("Error: {}: {}", message, e);
-    eprintln!();
+    error!("Error: {}: {}", message, e);
     let mut cmd = Cli::command();
     cmd.print_help().unwrap();
 }

@@ -1,5 +1,5 @@
 use thiserror::Error;
-
+use log::*;
 use super::search::{init_fetch_handles, join_fetch_handles};
 use super::search_options::SearchOptions;
 use crate::api::output_format::OutputFormat;
@@ -54,7 +54,7 @@ pub fn data_to_lines(data: &Vec<u8>, options: &SearchOptions) -> Vec<String> {
         .filter_map(|line| match line {
             Ok(feature) => Some(feature),
             Err(e) => {
-                eprintln!("{}", e);
+                debug!("{}", e);
                 None
             },
         })

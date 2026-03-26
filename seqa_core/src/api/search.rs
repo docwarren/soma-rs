@@ -2,7 +2,7 @@ use crate::api::search_options::SearchOptions;
 use crate::codecs::bgzip;
 use crate::indexes::chunk::Chunk;
 use crate::stores::StoreService;
-
+use log::error;
 use futures::TryStreamExt;
 use thiserror::Error;
 
@@ -127,12 +127,12 @@ pub async fn init_fetch_handles(
                 Ok(store_service) => match store_service.get_range(&file_path, range).await {
                     Ok(data) => data,
                     Err(e) => {
-                        eprintln!("Error fetching range for chunk {:?}: {}", chunk_clone, e);
+                        error!("Error fetching range for chunk {:?}: {}", chunk_clone, e);
                         vec![]
                     }
                 },
                 Err(e) => {
-                    eprintln!("Error creating store service: {}", e);
+                    error!("Error creating store service: {}", e);
                     vec![]
                 }
             }
