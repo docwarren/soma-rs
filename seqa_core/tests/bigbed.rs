@@ -8,21 +8,21 @@ const BED_PATH: &str = "s3://com.soma23.data/hg38/mane.bed.gz";
 const BED_INDEX_PATH: &str = "s3://com.soma23.data/hg38/mane.bed.gz.tbi";
 
 fn cleanup_bed_index() {
-    delete_local_index(BED_PATH, ".tbi");
+    delete_local_index(BED_INDEX_PATH);
 }
 
 #[tokio::test]
 async fn bigbed_search_matches_tabix() {
-    use seqa_core::api::bigbed_search::bigbed_search;
-    use seqa_core::api::tabix_search::tabix_search;
+    use seqa_core::services::search::SearchService;
     use seqa_core::api::search_options::SearchOptions;
 
     let bb_options = SearchOptions::new()
         .set_file_path(BIGBED_PATH)
         .set_coordinates("chr1:1000000-1300000")
+        .set_output_format("bigbed")
         .set_include_header(false);
 
-    let bb_result = bigbed_search(&bb_options).await.expect("Failed to search BigBed");
+    let bb_result = SearchService::search_features(&bb_options).await.expect("Failed to search BigBed");
 
     let bed_options = SearchOptions::new()
         .set_file_path(BED_PATH)
@@ -31,7 +31,7 @@ async fn bigbed_search_matches_tabix() {
         .set_output_format("bed")
         .set_include_header(false);
 
-    let bed_result = tabix_search(&bed_options).await.expect("Failed to search BED");
+    let bed_result = SearchService::search_features(&bed_options).await.expect("Failed to search BED");
 
     assert_eq!(
         bb_result.lines.len(),

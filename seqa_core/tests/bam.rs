@@ -2,12 +2,12 @@ const S3_BAM: &str = "s3://com.gmail.docarw/test_data/NA12877.bam";
 const S3_BAM_INDEX: &str = "s3://com.gmail.docarw/test_data/NA12877.bam.bai";
 
 fn cleanup_bam_index() {
-    seqa_core::indexes::index_cache::delete_local_index(S3_BAM, ".bai");
+    seqa_core::indexes::index_cache::delete_local_index(S3_BAM_INDEX);
 }
 
 #[tokio::test]
 async fn bam_chr12() {
-    use seqa_core::api::bam_search::bam_search;
+    use seqa_core::services::search::SearchService;
     use seqa_core::api::search_options::SearchOptions;
 
     let options = SearchOptions::new()
@@ -17,7 +17,7 @@ async fn bam_chr12() {
         .set_output_format("bam")
         .set_include_header(false);
 
-    let result = bam_search(&options).await.expect(&format!("Failed to search BAM for chr12: {}", options.chromosome));
+    let result = SearchService::search_features(&options).await.expect(&format!("Failed to search BAM for chr12: {}", options.chromosome));
     assert_eq!(result.lines.len(), 51);
     assert_eq!(format!("{}", result.lines[0]), "HSQ1008:141:D0CC8ACXX:4:2203:18142:64281	83	chr12	9999905	60	101M	=	9999602	-404	ATCAGAGACTAGGTTTGCAACCCCTGCTTTATTTTATTTTATTTTATTTACTTATTTATTTATTTTTGCTTTCCATTTGCTTGGGAAATATTTCTCCATCA	;:5>@>ACA@C?=A;;;<=48=EC=>@>DHF;HGHF<IIIIG>HEFDBB9FBHGHCHF@ECHFEFFBHEAE@BE@DBEFECAIIGGGE>BFC;BDDBD<@@	RG:Z:NA12877	XT:A:U	NM:i:0	SM:i:37	AM:i:37	X0:i:1	X1:i:0	XM:i:0	XO:i:0	XG:i:0	MD:Z:101");
     assert_eq!(format!("{}", result.lines[50]), "HSQ1008:141:D0CC8ACXX:4:1102:6116:159280	99	chr12	9999998	52	101M	=	10000295	398	CTCCATCACTTTATTTTGAGTCTATGTGTGTCTTTGCACATTCAATGGGTCTCCTGAATACAGCACACCAATGGTTCTTGACTCTTTATCCAATTTGCCAG	@CCFFFFFHHHFFGHIIEIGGHHIJJJJIIGGHJJIEGIJIGJEIIJIGGHGIJJJFHJJJJJJGGIIIGHIII=>CHHHGHFFFD>?CCECCCEEDDDC@	RG:Z:NA12877	XT:A:U	NM:i:0	SM:i:37	AM:i:15	X0:i:1	X1:i:0	XM:i:0	XO:i:0	XG:i:0	MD:Z:101");
