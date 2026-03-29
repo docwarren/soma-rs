@@ -13,7 +13,7 @@ const GCS_VCF_INDEX: &str = "gs://genre_test_bucket/NA12877.EVA.vcf.gz.tbi";
 
 #[tokio::test]
 async fn vcf_chr1() {
-    use seqa_core::api::tabix_search::tabix_search;
+    use seqa_core::services::search::SearchService;
     use seqa_core::api::search_options::SearchOptions;
 
     let options = SearchOptions::new()
@@ -25,7 +25,7 @@ async fn vcf_chr1() {
         .set_output_format("vcf")
         .set_include_header(false);
 
-    let result = tabix_search(&options).await.expect(&format!("Failed to search VCF for chr1: {}", options.chromosome));
+    let result = SearchService::search_features(&options).await.expect(&format!("Failed to search VCF for chr1: {}", options.chromosome));
     assert_eq!(result.lines.len(), 14);
     assert_eq!(result.lines[0], "chr1	116549	.	C	T	.	SuspiciousHomAlt	MTD=bwa_freebayes	GT	1|1");
     assert_eq!(result.lines[13], "chr1	356537	.	G	A	.	SuspiciousHomAlt	MTD=cgi	GT	1|1");
@@ -132,7 +132,7 @@ async fn cnv_vcf_chr_12() {
 
 #[tokio::test]
 async fn gff_test() {
-    use seqa_core::api::tabix_search::tabix_search;
+    use seqa_core::services::search::SearchService;
     use seqa_core::api::search_options::SearchOptions;
 
     let options = SearchOptions::new()
@@ -144,7 +144,26 @@ async fn gff_test() {
         .set_output_format("gff")
         .set_include_header(false);
 
-    let result = tabix_search(&options).await.expect(&format!("Failed to search GFF for chr1: {}", options.chromosome));
+    let result = SearchService::search_features(&options).await.expect(&format!("Failed to search GFF for chr1: {}", options.chromosome));
+    assert_eq!(result.lines.len(), 31);
+    delete_local_index(S3_GTF_INDEX);
+}
+
+#[tokio::test]
+async fn gtf_test() {
+    use seqa_core::services::search::SearchService;
+    use seqa_core::api::search_options::SearchOptions;
+
+    let options = SearchOptions::new()
+        .set_file_path(S3_GTF)
+        .set_index_path(S3_GTF_INDEX)
+        .set_chromosome("chr1")
+        .set_begin(1)
+        .set_end(50000)
+        .set_output_format("gtf")
+        .set_include_header(false);
+
+    let result = SearchService::search_features(&options).await.expect(&format!("Failed to search GTF for chr1: {}", options.chromosome));
     assert_eq!(result.lines.len(), 31);
     delete_local_index(S3_GTF_INDEX);
 }
@@ -232,4 +251,24 @@ async fn http_vcf() {
     assert_eq!(result.lines[0], "chr1	100006117	.	G	A	.	PASS	MTD=cgi,bwa_freebayes,bwa_platypus,isaac2,bwa_gatk3	GT	1|1");
     assert_eq!(result.lines[112929], "chr1	199999917	.	G	A	.	PASS	MTD=cgi,bwa_freebayes,bwa_platypus,bwa_gatk3,cortex,isaac2	GT	0|1");
     delete_local_index(http_vcf_index);
+}
+
+#[tokio::test]
+async fn bedgraph_test() {
+    use seqa_core::services::search::SearchService;
+    use seqa_core::api::search_options::SearchOptions;
+
+    let bedgraph = "s3://com.gmail.docarw/test_data/test.bedgraph.gz";
+    let bedgraph_index = "s3://com.gmail.docarw/test_data/test.bedgraph.gz.tbi";
+
+    let options = SearchOptions::new()
+        .set_file_path(bedgraph)
+        .set_index_path(bedgraph_index)
+        .set_coordinates("chr1:1-100000000")
+        .set_output_format("bedgraph")
+        .set_include_header(false);
+
+    let result = SearchService::search_features(&options).await.expect("Failed to search BEDGRAPH for chr1");
+    assert_eq!(result.lines.len(), 5860);
+    delete_local_index(bedgraph_index);
 }
