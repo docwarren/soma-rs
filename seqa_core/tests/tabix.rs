@@ -212,21 +212,25 @@ async fn no_cache_does_not_write_index_file() {
     use seqa_core::api::search_options::SearchOptions;
     use seqa_core::indexes::index_cache::get_local_index_path;
 
-    // Clean up any leftover cache file from previous runs
-    delete_local_index(S3_VCF_INDEX);
+    // Use the bedgraph index which no other test caches, avoiding parallel test races
+    let no_cache_file = "s3://com.gmail.docarw/test_data/test.bedgraph.gz";
+    let no_cache_index = "s3://com.gmail.docarw/test_data/test.bedgraph.gz.tbi";
 
-    let cache_path = get_local_index_path(S3_VCF_INDEX);
+    // Clean up any leftover cache file from previous runs
+    delete_local_index(no_cache_index);
+
+    let cache_path = get_local_index_path(no_cache_index);
     assert!(!cache_path.exists(), "Cache file should not exist before search");
 
     let options = SearchOptions::new()
-        .set_file_path(S3_VCF)
-        .set_index_path(S3_VCF_INDEX)
-        .set_coordinates("chr1:116549-116550")
-        .set_output_format("vcf")
+        .set_file_path(no_cache_file)
+        .set_index_path(no_cache_index)
+        .set_coordinates("chr1:1-100000000")
+        .set_output_format("bedgraph")
         .set_include_header(false)
         .set_no_cache(true);
 
-    let result = tabix_search(&options).await.expect("Failed to search VCF");
+    let result = tabix_search(&options).await.expect("Failed to search BEDGRAPH");
     assert!(!result.lines.is_empty(), "Search should return results");
     assert!(!cache_path.exists(), "Cache file should not exist after search with no_cache=true");
 }
