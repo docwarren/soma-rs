@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::stores::StoreError;
 use object_store::aws::{AmazonS3, AmazonS3Builder};
 use object_store::azure::{MicrosoftAzure, MicrosoftAzureBuilder};
 use object_store::gcp::{GoogleCloudStorage, GoogleCloudStorageBuilder};
@@ -21,12 +22,24 @@ use object_store::local::LocalFileSystem;
 
 use url::Url;
 
-use crate::stores::error::StoreError;
-
 /// Extracts the bucket name from an S3 URL.
 /// For s3:// URLs, the bucket is the host (e.g. s3://bucket/key -> "bucket").
 /// For https:// S3 URLs, the bucket is the first path segment
 /// (e.g. https://s3.region.amazonaws.com/bucket/key -> "bucket").
+
+// S3
+pub fn get_s3_store_from_bucket(bucket: &str) -> Result<AmazonS3, StoreError> {
+    match AmazonS3Builder::from_env()
+        .with_bucket_name(bucket)
+        .build() {
+        Ok(store) => Ok(store),
+        Err(e) => {
+            log::error!("{}", e);
+            Err(StoreError::StoreNotInitialized(format!("{}", e)))
+        },
+    }
+}
+
 pub fn get_s3_bucket_from_url(s3_url: &str) -> Option<String> {
     let url = Url::parse(s3_url).ok()?;
     match url.scheme() {
@@ -43,6 +56,20 @@ pub fn get_s3_store(url: Option<&str>) -> Result<AmazonS3, StoreError> {
         None => AmazonS3Builder::from_env(),
     };
     Ok(builder.build()?)
+}
+
+// Google Cloud
+
+pub fn get_gc_store_from_bucket(bucket: &str) -> Result<GoogleCloudStorage, StoreError> {
+    match GoogleCloudStorageBuilder::from_env()
+        .with_bucket_name(bucket)
+        .build() {
+        Ok(store) => Ok(store),
+        Err(e) => {
+            log::error!("{}", e);
+            Err(StoreError::StoreNotInitialized(format!("{}", e)))
+        },
+    }
 }
 
 pub fn get_gc_store(bucket: Option<String>) -> Result<GoogleCloudStorage, StoreError> {
@@ -63,6 +90,19 @@ pub fn get_gc_store(bucket: Option<String>) -> Result<GoogleCloudStorage, StoreE
     Ok(builder.build()?)
 }
 
+// Azure Blob
+
+pub fn get_azure_store_from_container(container_name: &str) -> Result<MicrosoftAzure, StoreError> {
+    match MicrosoftAzureBuilder::from_env()
+        .with_container_name(container_name)
+        .build() {
+        Ok(store) => Ok(store),
+        Err(e) => {
+            eprintln!("{}", e);
+            Err(StoreError::StoreNotInitialized(format!("{}", e)))
+        },
+    }
+}
 pub fn get_azure_store(bucket: Option<String>) -> Result<MicrosoftAzure, StoreError> {
 
     let account_id = std::env::var("AZURE_STORAGE_ACCOUNT").unwrap_or_default();
@@ -115,5 +155,24 @@ mod tests {
     #[test]
     fn test_get_s3_bucket_from_invalid_url() {
         assert_eq!(get_s3_bucket_from_url("not a url"), None);
+    }
+
+    #[test]
+    fn test_get_s3_store_from_bucket() {
+        let bucket = "com.gmail.docarw";
+        assert!(get_s3_store_from_bucket(bucket).is_ok());
+    }
+
+    #[test]
+    fn test_get_gc_store_from_bucket() {
+        let bucket = "genre_test_bucket";
+        assert!(get_gc_store_from_bucket(bucket).is_ok());
+    }
+
+    #[test]
+    fn test_az_store_from_container_name() {
+        let container_name = "genreblobs/genre-test-data";
+        let store = get_azure_store_from_container(container_name);
+        assert!(store.is_ok());
     }
 }

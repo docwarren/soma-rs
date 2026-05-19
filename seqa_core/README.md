@@ -28,8 +28,6 @@ Core library for querying genomic files across cloud and local storage. Handles 
 
 ## Environment Variables
 
-Set credentials for whichever backends you need.
-
 ### AWS S3
 ```bash
 export AWS_ACCESS_KEY_ID=...
@@ -39,8 +37,7 @@ export AWS_REGION=...
 
 ### Azure Blob Storage
 ```bash
-export AZURE_STORAGE_ACCOUNT=...
-export AZURE_STORAGE_CONTAINER=...
+export AZURE_STORAGE_ACCOUNT_NAME=...
 export AZURE_STORAGE_ACCESS_KEY=...
 ```
 
@@ -48,11 +45,9 @@ export AZURE_STORAGE_ACCESS_KEY=...
 ```bash
 # Option 1 (preferred): JSON key content directly as an env var
 export GOOGLE_SERVICE_ACCOUNT_KEY='{ "type": "service_account", ... }'
-export GOOGLE_BUCKET=...
 
 # Option 2 (fallback): path to a service account JSON file
 export GOOGLE_SERVICE_ACCOUNT=/path/to/credentials.json
-export GOOGLE_BUCKET=...
 ```
 
 ## Features
