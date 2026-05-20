@@ -21,6 +21,7 @@ use futures::StreamExt;
 use log::info;
 use object_store::path::Path as ObjectStorePath;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreScheme, PutPayload};
+use url::Url;
 
 pub mod error;
 pub mod store;
@@ -40,11 +41,7 @@ use error::StoreError;
 /// ```rust,no_run
 /// use seqa_core::stores::StoreService;
 ///
-/// // Local file
-/// let svc = StoreService::from_uri("file:///data/sample.bam").unwrap();
-///
-/// // AWS S3 (requires AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION env vars)
-/// let svc = StoreService::from_uri("s3://my-bucket/sample.bam").unwrap();
+/// let svc = StoreService::new();
 /// ```
 #[derive(Debug, Default)]
 pub struct StoreService {
@@ -55,6 +52,41 @@ impl StoreService {
     /// Creates an empty `StoreService`. Backends are built lazily on first access.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    // For http paths that are not object store paths, we return the whole URL.
+    fn get_bucket_from_path(path: &str) -> Result<String, StoreError> {
+        let url = Url::parse(&path)?;
+        let scheme = url.scheme();
+        let (obj_scheme, _) = Self::get_obj_scheme_and_path(path)?;
+
+        if scheme == "file" {
+             Ok("".to_string())
+        }
+        else if obj_scheme == ObjectStoreScheme::Http {
+            Ok(path.to_string())
+        }
+        else if scheme == "az" || (scheme == "http" || scheme == "https" && obj_scheme != ObjectStoreScheme::Http) {
+            let mut parts = url.path_segments().ok_or_else(|| StoreError::ValidationError(
+                "Invalid Azure or HTTP path".into(),
+            ))?;
+            if let Some(bucket) = parts.next() {
+                Ok(bucket.to_string())
+            } else {
+                Err(StoreError::ValidationError(
+                    "Azure path missing bucket".into(),
+                ))
+            }
+        }
+        else {
+            let mut parts = path.split("://");
+            if parts.clone().count() < 2 {
+                Err(StoreError::ValidationError("Invalid path".into()))
+            }
+            else {
+                Ok(parts.nth(1).unwrap().split('/').nth(0).unwrap().to_string())
+            }
+        }
     }
 
     fn get_store_key_from_bucket(bucket: &str, kind: &ObjectStoreScheme) -> Result<String, StoreError> {
@@ -72,7 +104,7 @@ impl StoreService {
                 Ok(format!("az-{}", bucket))
             }
             ObjectStoreScheme::Http => {
-                Ok(format!("http-{}", bucket))
+                Ok("http".to_string())
             }
             _ => {
                 Err(StoreError::ValidationError(
@@ -82,7 +114,7 @@ impl StoreService {
         }
     }
 
-    fn get_store_cache(&self) -> Result<MutexGuard<HashMap<String, Arc<dyn ObjectStore>>>, StoreError> {
+    fn get_store_cache(&'_ self) -> Result<MutexGuard<'_, HashMap<String, Arc<dyn ObjectStore>>>, StoreError> {
         match self.stores.lock() {
             Ok(cache) => Ok(cache),
             Err(_) => Err(StoreError::ValidationError(
@@ -91,6 +123,8 @@ impl StoreService {
         }
     }
 
+    /// TODO: Fix this so that we dont pass the path and call it the bucket for http store.
+    /// For HTTP stores bucket is actually the whole URL.
     fn build_store(&self, bucket: &str, store_kind: &ObjectStoreScheme) -> Result<Arc<dyn ObjectStore>, StoreError> {
         match store_kind {
             ObjectStoreScheme::Local => {
@@ -106,7 +140,7 @@ impl StoreService {
                 Ok(Arc::new(store::get_azure_store_from_container(bucket)?))
             }
             ObjectStoreScheme::Http => {
-                Ok(Arc::new(store::get_http_store(None)?))
+                Ok(Arc::new(store::get_http_store(bucket)?))
             }
             _ => {
                 Err(StoreError::ValidationError(
@@ -116,13 +150,16 @@ impl StoreService {
         }
     }
 
-    pub fn get_or_create_store(&self, bucket: &str, store_kind: &ObjectStoreScheme) -> Result<Arc<dyn ObjectStore>, StoreError> {
-        let store_key = Self::get_store_key_from_bucket(bucket, store_kind)?;
+    pub fn get_or_create_store(&self, path: &str) -> Result<Arc<dyn ObjectStore>, StoreError> {
+        let abs_path = Self::get_absolute_path(path)?;
+        let bucket = Self::get_bucket_from_path(&abs_path)?;
+        let (store_kind, _) = Self::get_obj_scheme_and_path(&abs_path)?;
+        let store_key = Self::get_store_key_from_bucket(&bucket, &store_kind)?;
         let mut store_cache = self.get_store_cache()?;
         if let Some(store) = store_cache.get(&store_key) {
             return Ok(Arc::clone(store));
         }
-        let store = self.build_store(bucket, store_kind)?;
+        let store = self.build_store(&bucket, &store_kind)?;
         store_cache.insert(store_key, Arc::clone(&store));
         Ok(store)
     }
@@ -134,15 +171,13 @@ impl StoreService {
     /// # Errors
     ///
     /// Returns [`StoreError`] on path normalisation failure or storage I/O errors.
-    pub async fn get_range(&self, path: &str, range: Range<u64>, bucket: &str, kind: &ObjectStoreScheme) -> Result<Vec<u8>, StoreError> {
-        let (_, url) = Self::get_canonical_path(path)?;
-        let store = self.get_or_create_store(bucket, kind)?;
+    pub async fn get_range(&self, path: &str, range: Range<u64>) -> Result<Vec<u8>, StoreError> {
+        let (_, url) = Self::get_obj_scheme_and_path(path)?;
+        let store = self.get_or_create_store(path)?;
         Ok(store.get_range(&url, range).await?.to_vec())
     }
 
-    /// Get file path
-    /// Gets a Path object from the string supplied.
-    pub fn get_canonical_path(path: &str) -> Result<(ObjectStoreScheme, ObjectStorePath), StoreError> {
+    pub fn get_absolute_path(path: &str) -> Result<String, StoreError> {
         let mut abs_path = path.to_owned();
 
         if !path.contains("://") {
@@ -159,10 +194,15 @@ impl StoreService {
                 }
             };
         }
+        Ok(abs_path)
+    }
 
-        let url = &abs_path.parse()?;
+    /// Get file path
+    /// Gets a Path object from the string supplied.
+    pub fn get_obj_scheme_and_path(path: &str) -> Result<(ObjectStoreScheme, ObjectStorePath), StoreError> {
+        let url = Url::parse(&path)?;
 
-        match ObjectStoreScheme::parse(url) {
+        match ObjectStoreScheme::parse(&url) {
             Ok((scheme, path)) => {
                 match scheme {
                     ObjectStoreScheme::MicrosoftAzure => { Ok((scheme, path)) }
@@ -184,26 +224,26 @@ impl StoreService {
     }
 
     /// Returns the total size of the object at `path` in bytes.
-    pub async fn get_file_size(&self, path: &str, bucket: &str, kind: &ObjectStoreScheme) -> Result<u64, StoreError> {
-        let (_, canonical) = Self::get_canonical_path(path)?;
-        let store = self.get_or_create_store(bucket, kind)?;
+    pub async fn get_file_size(&self, path: &str) -> Result<u64, StoreError> {
+        let (_, canonical) = Self::get_obj_scheme_and_path(path)?;
+        let store = self.get_or_create_store(path)?;
         let meta = store.head(&canonical).await?;
         Ok(meta.size)
     }
 
     /// Downloads the entire object at `path` and returns its bytes.
-    pub async fn get_object(&self, path: &str, bucket: &str, kind: &ObjectStoreScheme) -> Result<Vec<u8>, StoreError> {
-        let (_, canonical) = Self::get_canonical_path(path)?;
-        let store = self.get_or_create_store(bucket, kind)?;
+    pub async fn get_object(&self, path: &str) -> Result<Vec<u8>, StoreError> {
+        let (_, canonical) = Self::get_obj_scheme_and_path(path)?;
+        let store = self.get_or_create_store(path)?;
         let result = store.get(&canonical).await?;
         let bytes = result.bytes().await?;
         Ok(bytes.to_vec())
     }
 
     /// Uploads `contents` to the object at `path`, creating or overwriting it.
-    pub async fn put_object(&self, path: &str, contents: &[u8], bucket: &str, kind: &ObjectStoreScheme) -> Result<(), StoreError> {
-        let (_, canonical) = Self::get_canonical_path(path)?;
-        let store = self.get_or_create_store(bucket, kind)?;
+    pub async fn put_object(&self, path: &str, contents: &[u8]) -> Result<(), StoreError> {
+        let (_, canonical) = Self::get_obj_scheme_and_path(path)?;
+        let store = self.get_or_create_store(path)?;
 
         let payload = PutPayload::from(contents.to_vec());
 
@@ -216,9 +256,9 @@ impl StoreService {
     }
 
     /// Lists all objects whose path begins with `prefix`, returning their metadata.
-    pub async fn list_objects(&self, prefix: &str,bucket: &str, kind: &ObjectStoreScheme) -> Result<Vec<ObjectMeta>, StoreError> {
-        let (_, canonical) = Self::get_canonical_path(prefix)?;
-        let store = self.get_or_create_store(bucket, kind)?;
+    pub async fn list_objects(&self, prefix: &str) -> Result<Vec<ObjectMeta>, StoreError> {
+        let (_, canonical) = Self::get_obj_scheme_and_path(prefix)?;
+        let store = self.get_or_create_store(prefix)?;
         let mut results = Vec::new();
         let mut stream = store.list(Some(&canonical));
 
