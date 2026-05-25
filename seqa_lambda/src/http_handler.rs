@@ -72,20 +72,15 @@ async fn search_handler(event: Request) -> Result<Response<Body>, Error> {
         }
     };
 
-    if let Ok(store) = StoreService::from_uri(&options.file_path) {
+    let store = StoreService::new();
         let result = store.search_features(&options).await?;
         let lines = serde_json::to_string(&result.lines)?;
 
-        return Ok(Response::builder()
+        Ok(Response::builder()
             .status(200)
             .header("content-type", "application/json")
             .body(Body::Text(lines))
-            .map_err(Box::new)?);
-    }
-    Ok(Response::builder()
-        .status(500)
-        .body("Internal Server Error".into())
-        .map_err(Box::new)?)
+            .map_err(Box::new)?)
 }
 
 fn gene_symbols(genome: &str) -> Result<Response<Body>, Error> {

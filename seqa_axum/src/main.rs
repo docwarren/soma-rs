@@ -18,7 +18,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{Path, Request, State, rejection::JsonRejection},
-    http::{HeaderValue, Method, StatusCode, header, Uri},
+    http::{Method, StatusCode, header, Uri},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
@@ -259,8 +259,15 @@ async fn not_found_fallback(req: Request) -> (StatusCode, Html<String>) {
 }
 
 pub fn app() -> Router {
+    let local_origins = [
+        "http://localhost:5173".parse().unwrap(),
+        "http://localhost:6006".parse().unwrap(),
+        "http://localhost:6007".parse().unwrap(),
+        "http://127.0.0.1:6007".parse().unwrap(),
+    ];
+
     let cors = CorsLayer::new()
-        .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+        .allow_origin(local_origins)
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
         .allow_credentials(true);
