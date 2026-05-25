@@ -152,22 +152,8 @@ mod tests {
         assert_eq!(get_s3_bucket_from_url("not a url"), None);
     }
 
-    #[test]
-    fn test_get_s3_store_from_bucket() {
-        let bucket = "com.gmail.docarw";
-        assert!(get_s3_store_from_bucket(bucket).is_ok());
-    }
-
-    #[test]
-    fn test_get_gc_store_from_bucket() {
-        let bucket = "genre_test_bucket";
-        assert!(get_gc_store_from_bucket(bucket).is_ok());
-    }
-
-    #[test]
-    fn test_az_store_from_container_name() {
-        let container_name = "genreblobs/genre-test-data";
-        let store = get_azure_store_from_container(container_name);
-        assert!(store.is_ok());
-    }
+    // Store-builder tests (test_get_s3_store_from_bucket, test_get_gc_store_from_bucket,
+    // test_az_store_from_container_name) live in tests/obj_store.rs because they call
+    // *Builder::from_env() and require cloud credentials, which only the credentialed
+    // integration/coverage jobs provide — not the --lib `test` job.
 }

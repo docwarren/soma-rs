@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use seqa_core::stores::store::{
+    get_azure_store_from_container, get_gc_store_from_bucket, get_s3_store_from_bucket,
+};
 use seqa_core::stores::StoreService;
 
 #[tokio::test]
@@ -73,4 +76,25 @@ fn get_canonical_path_s3() {
     let path = "s3://com.gmail.docarw/test_data/density.bw";
     let (_, canonical) = StoreService::get_obj_scheme_and_path(path).expect("Failed to get canonical path");
     assert_eq!(canonical.as_ref(), "test_data/density.bw");
+}
+
+// These build object stores via *Builder::from_env() and require cloud credentials,
+// so they run in the credentialed integration/coverage jobs rather than as --lib units.
+#[test]
+fn test_get_s3_store_from_bucket() {
+    let bucket = "com.gmail.docarw";
+    assert!(get_s3_store_from_bucket(bucket).is_ok());
+}
+
+#[test]
+fn test_get_gc_store_from_bucket() {
+    let bucket = "genre_test_bucket";
+    assert!(get_gc_store_from_bucket(bucket).is_ok());
+}
+
+#[test]
+fn test_az_store_from_container_name() {
+    let container_name = "genreblobs/genre-test-data";
+    let store = get_azure_store_from_container(container_name);
+    assert!(store.is_ok());
 }
