@@ -15,10 +15,17 @@
 
 use flate2::read::ZlibDecoder;
 use std::io::Read;
+use crate::codecs::codec_error::CodecError;
 
-pub fn decompress_zlib(compressed_data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+pub fn decompress_zlib(compressed_data: &[u8]) -> Result<Vec<u8>, CodecError> {
     let mut decoder = ZlibDecoder::new(compressed_data);
-    let mut decompressed_data = Vec::new();
-    decoder.read_to_end(&mut decompressed_data)?;
-    Ok(decompressed_data)
+    let mut decompressed = Vec::new();
+    let result = decoder.read_to_end(&mut decompressed);
+    match result {
+        Ok(_) => Ok(decompressed),
+        Err(e) => Err(CodecError::ReaderError {
+            decoder_used: "Zlib".to_string(),
+            source: e
+        }),
+    }
 }

@@ -68,15 +68,10 @@ pub async fn get_or_download_index(
     // Check if index exists locally (skip when no_cache is set)
     if !no_cache && local_path.exists() {
         // Read from local cache
-        match fs::read(&local_path).await {
-            Ok(bytes) => {
-                return Ok(bytes);
-            }
-            Err(e) => {
-                debug!("Warning: Failed to read local index {}: {}. Downloading from remote.",
-                    local_path.display(), e);
-            }
-        }
+        return fs::read(&local_path).await.map_err(|e| StoreError::CacheReadError {
+            key: index_path.to_string(),
+            source: e
+        });
     }
 
     // Index doesn't exist locally or failed to read - download from remote

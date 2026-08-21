@@ -61,25 +61,19 @@ pub fn data_to_lines(
     let mut i = 0;
     let mut end = false;
     let use_merged_cigar = options.cigar_format == CigarFormat::Merged;
-
-    loop {
-        match Read::from_bytes(data, i, bam_header) {
-            Ok((read_line, j)) => {
-                if read_line.pos > options.end as i32 {
-                    end = true;
-                    break; // Stop processing if the position exceeds the end of the search range
-                } else if !read_line.overlaps(options) {
-                    i = j; // Skip this read if it is before the start of the search range
-                    continue;
-                } else {
-                    lines.push(read_line.to_sam_string(use_merged_cigar));
-                }
-                i = j;
-            }
-            _ => {
-                break;
-            }
+    while let Ok(read_line_result) = Read::from_bytes(data, i, bam_header) {
+        let read_line = read_line_result.0;
+        let j = read_line_result.1;
+        if read_line.pos > options.end as i32 {
+            end = true;
+            break; // Stop processing if the position exceeds the end of the search range
+        } else if !read_line.overlaps(options) {
+            i = j; // Skip this read if it is before the start of the search range
+            continue;
+        } else {
+            lines.push(read_line.to_sam_string(use_merged_cigar));
         }
+        i = j;
     }
 
     Ok((end, lines))

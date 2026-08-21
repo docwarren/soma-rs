@@ -16,12 +16,16 @@
 use super::{constants::MAX_BLOCK_SIZE, virtual_offset::VirtualOffset};
 use serde::{Deserialize, Serialize};
 use core::ops::Range;
+use std::array::TryFromSliceError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ChunkError {
-    #[error("Parsing error: {0}")]
-    ParsingError(#[from] core::array::TryFromSliceError),
+    #[error("Parsing error")]
+    ParsingError{
+        #[source]
+        source: TryFromSliceError
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,8 +55,13 @@ impl Chunk {
 
     pub fn from_bytes(bytes: &[u8], bin_number: u32) -> Result<Self, ChunkError> {
 
-        let cnk_beg = u64::from_le_bytes(bytes[..8].try_into()?);
-        let cnk_end = u64::from_le_bytes(bytes[8..16].try_into()?);
+        let cnk_beg = u64::from_le_bytes(bytes[..8]
+            .try_into()
+            .map_err(|e| ChunkError::ParsingError{ source: e })?);
+
+        let cnk_end = u64::from_le_bytes(bytes[8..16]
+            .try_into()
+            .map_err(|e| ChunkError::ParsingError{ source: e })?);
 
         // Create TabixChunk and add to TabixBin
         let chunk = Chunk::new(

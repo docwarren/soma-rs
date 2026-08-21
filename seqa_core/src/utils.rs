@@ -141,10 +141,8 @@ pub fn get_index_path(file_path: &str) -> Result<String, ExtensionError> {
         Ok(format!("{}.bai", file_path))
     } else if lower_path.ends_with(".fa") || lower_path.ends_with(".fasta") {
         Ok(format!("{}.fai", file_path))
-    } else if lower_path.ends_with(".bigwig") || lower_path.ends_with(".bw") {
-        Ok(format!("-"))
-    } else if lower_path.ends_with(".bigbed") || lower_path.ends_with(".bb") {
-        Ok(format!("-"))  // BigBed files have embedded index like BigWig
+    } else if lower_path.ends_with(".bigwig") || lower_path.ends_with(".bw") ||  lower_path.ends_with(".bigbed") || lower_path.ends_with(".bb") {
+        Ok("-".to_string())  // BigBed files have embedded index like BigWig
     } else if lower_path.ends_with(".vcf.gz")
         || lower_path.ends_with(".gff.gz")
         || lower_path.ends_with(".bed.gz")

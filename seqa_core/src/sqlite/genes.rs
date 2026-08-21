@@ -34,14 +34,14 @@ pub enum GeneError {
 }
 
 pub fn establish_connection(db_path: String) -> Result<Connection, GeneError> {
-    let conn = Connection::open(db_path).map_err(|e| GeneError::DatabaseError(e))?;
+    let conn = Connection::open(db_path).map_err(GeneError::DatabaseError)?;
     Ok(conn)
 }
 
 pub fn get_gene_coordinates(conn: &Connection, symbol: &str) -> Result<GeneCoordinate, GeneError> {
     let mut stmt = conn
         .prepare("SELECT * FROM coordinates WHERE gene = ?1")
-        .map_err(|e| GeneError::DatabaseError(e))?;
+        .map_err(GeneError::DatabaseError)?;
 
     let gene = stmt
         .query_row(params![symbol], |row| {
@@ -76,7 +76,7 @@ pub fn get_gene_coordinates(conn: &Connection, symbol: &str) -> Result<GeneCoord
 pub fn get_gene_symbols(conn: &Connection) -> Result<Vec<String>, GeneError> {
 
     let mut stmt = conn.prepare("SELECT gene FROM coordinates")?;
-    let gene_result = stmt.query_map([],|row| Ok(row.get(0)?))?;
+    let gene_result = stmt.query_map([],|row| row.get(0))?;
     let mut genes = Vec::new();
     for gene in gene_result {
         genes.push(gene?);
@@ -100,9 +100,7 @@ pub fn get_cytobands(conn: &Connection, chromosome: &str) -> Result<Vec<Cytoband
 
     let mut cytobands = Vec::new();
     for cytoband in cytoband_iter {
-        if let Ok(cyto) = cytoband {
-            cytobands.push(cyto);
-        }
+        cytobands.push(cytoband?);
     }
     Ok(cytobands)
 }

@@ -29,14 +29,14 @@ impl Seq {
         Seq { bytes }
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         if self.bytes.is_empty() {
             return String::from("*");
         }
 
         let mut i = 0;
         let mut result = String::new();
-        let read_last_base: bool = self.bytes.len() % 2 == 0;
+        let read_last_base: bool = self.bytes.len().is_multiple_of(2);
 
         while i < self.bytes.len() {
             let byte = self.bytes[i];
@@ -56,6 +56,6 @@ impl Seq {
 
 impl Display for Seq {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.as_string())
     }
 }

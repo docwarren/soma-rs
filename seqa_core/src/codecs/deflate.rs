@@ -15,11 +15,17 @@
 
 use flate2::read::DeflateDecoder;
 use std::io::Read;
+use crate::codecs::codec_error::CodecError;
 
-pub fn decompress_deflate(compressed_data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
-
+pub fn decompress_deflate(compressed_data: &[u8]) -> Result<Vec<u8>, CodecError> {
     let mut decoder = DeflateDecoder::new(compressed_data);
     let mut decompressed_data = Vec::new();
-    decoder.read_to_end(&mut decompressed_data)?;
-    Ok(decompressed_data)
+    let result = decoder.read_to_end(&mut decompressed_data);
+    match result {
+        Ok(_) => Ok(decompressed_data),
+        Err(e) => Err(CodecError::ReaderError {
+            decoder_used: "Deflate".to_string(),
+            source: e
+        }),
+    }
 }

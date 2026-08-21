@@ -17,6 +17,13 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum StoreError {
+    #[error("Cache Rear error")]
+    CacheReadError{
+        key: String,
+        #[source]
+        source: std::io::Error
+    },
+
     #[error("Failed to parse URL: {0}")]
     UrlParseError(#[from] url::ParseError),
 

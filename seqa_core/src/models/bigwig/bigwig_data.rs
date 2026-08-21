@@ -200,6 +200,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_read_type_2_data() {
         let begin: u32 = 5000;
         let value: f32 = 3.14;
@@ -218,6 +219,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_read_type_3_data() {
         let value: f32 = 2.718;
         let bytes = value.to_le_bytes();

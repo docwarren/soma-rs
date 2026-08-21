@@ -113,7 +113,7 @@ impl Read {
     fn init_enhanced_read(&self) -> String {
         let mut new_seq = String::new();
         let mut seq_index = 0;
-        let sequence = self.seq.to_string();
+        let sequence = self.seq.as_string();
         let seq_bytes = sequence.as_bytes();
 
         for op in self.cigar.get_operations() {

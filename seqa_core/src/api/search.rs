@@ -29,6 +29,7 @@ use futures::{future::join_all, TryStreamExt};
 use log::error;
 use object_store::ObjectStore;
 use thiserror::Error;
+use crate::codecs::codec_error::CodecError;
 
 #[derive(Debug, Error)]
 pub enum SearchError {
@@ -42,7 +43,7 @@ pub enum SearchError {
     ObjectStoreError(#[from] object_store::Error),
 
     #[error("BgZip Error: {0}")]
-    BgZipError(#[from] bgzip::BgZipError),
+    BgZipError(#[from] CodecError),
 }
 
 /// Unified error returned by [`StoreService::search_features`].

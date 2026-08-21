@@ -25,6 +25,12 @@ pub struct GeneCoordinateService {
     pub genes_coordinates_conn: Connection,
 }
 
+impl Default for GeneCoordinateService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GeneCoordinateService {
     pub fn new() -> Self {
         let genes_coordinates_conn = establish_connection(GENE_COORDINATES_DB).expect("Failed to establish connection to gene coordinates database");
