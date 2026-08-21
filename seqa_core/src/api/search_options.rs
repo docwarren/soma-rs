@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 // Copyright 2026 Seqa23
 //
 // Author: Andrew Warren
@@ -12,14 +13,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use std::fmt::Display;
 
-use serde::{Deserialize, Serialize};
-
-use crate::{genome::{chr_index, chromosome_len, get_longest_possible_genome}, indexes::{bai::BaiIndex, bigwig::BigwigIndex, fai::FaiIndex, tabix::Tabix}, models::{bam_header::header::BamHeader, tabix_header::TabixHeader}, traits::feature::Feature};
-use crate::utils::{get_output_format, parse_coordinates};
 use super::output_format::OutputFormat;
+use crate::bam::bai::BaiIndex;
+use crate::bam::header::header::BamHeader;
+use crate::bigwig::index::bigwig_index::BigwigIndex;
+use crate::fasta::fai::FaiIndex;
+use crate::genome::{chr_index, chromosome_len, get_longest_possible_genome};
+use crate::tabix::tabix::Tabix;
+use crate::tabix::tabix_header::TabixHeader;
+use crate::traits::feature::Feature;
+use crate::utils::{get_output_format, parse_coordinates};
 
 /// Specifies the format of the CIGAR string in BAM output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

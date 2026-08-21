@@ -12,66 +12,22 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use crate::api::bam_search::{bam_search, BamError};
-use crate::api::bigbed_search::{bigbed_search, BigbedError};
-use crate::api::bigwig_search::{bigwig_search, BigwigError};
-use crate::api::fasta_search::{fasta_search, FastaSearchError};
-use crate::api::output_format::OutputFormat;
-use crate::api::search_options::SearchOptions;
-use crate::api::search_result::SearchResult;
-use crate::api::tabix_search::{tabix_search, TabixSearchError};
-use crate::codecs::bgzip;
-use crate::indexes::chunk::Chunk;
-use crate::stores::StoreService;
-use crate::utils::UtilError;
-use futures::{future::join_all, TryStreamExt};
+use futures::{TryStreamExt, future::join_all};
 use log::error;
 use object_store::ObjectStore;
-use thiserror::Error;
-use crate::codecs::codec_error::CodecError;
 
-#[derive(Debug, Error)]
-pub enum SearchError {
-    #[error("Failed to process data: {0}")]
-    DataProcessingError(String),
-
-    #[error("Store Error: {0}")]
-    StoreError(#[from] crate::stores::error::StoreError),
-
-    #[error("Object Store Error: {0}")]
-    ObjectStoreError(#[from] object_store::Error),
-
-    #[error("BgZip Error: {0}")]
-    BgZipError(#[from] CodecError),
-}
-
-/// Unified error returned by [`StoreService::search_features`].
-///
-/// Wraps the format-specific error from the underlying search function.
-#[derive(Debug, Error)]
-pub enum SearchFeaturesError {
-    #[error("Search Error: {0}")]
-    String(String),
-
-    #[error("BAM error occurred")]
-    Bam(#[from] BamError),
-
-    #[error("Fasta error occurred")]
-    Fasta(#[from] FastaSearchError),
-
-    #[error("Tabix error occurred")]
-    Tabix(#[from] TabixSearchError),
-
-    #[error("BigWig error occurred")]
-    BigWig(#[from] BigwigError),
-
-    #[error("BigBed error occurred")]
-    BigBed(#[from] BigbedError),
-
-    #[error("Utility error occurred")]
-    Util(#[from] UtilError),
-}
+use crate::api::output_format::OutputFormat;
+pub(crate) use crate::api::search_error::{SearchError, SearchFeaturesError};
+use crate::api::search_options::SearchOptions;
+use crate::api::search_result::SearchResult;
+use crate::bam::bam_search::bam_search;
+use crate::bigwig::bigbed_search::bigbed_search;
+use crate::bigwig::bigwig_search::bigwig_search;
+use crate::codecs::bgzip;
+use crate::fasta::fasta_search::fasta_search;
+use crate::indexes::chunk::Chunk;
+use crate::stores::StoreService;
+use crate::tabix::tabix_search::tabix_search;
 
 pub async fn chunk_to_stream(
     chunk: &Chunk,
@@ -138,31 +94,29 @@ pub async fn join_fetch_handles(
     Ok(raw_data)
 }
 
-impl StoreService {
-    /// Searches for features in a file based on the provided search options.
-    ///
-    /// Dispatches to the format-specific search function indicated by
-    /// [`SearchOptions::output_format`] and reuses this `StoreService`'s cached
-    /// object_store clients for every backend access.
-    pub async fn search_features(
-        &self,
-        options: &SearchOptions,
-    ) -> Result<SearchResult, SearchFeaturesError> {
-        let result = match options.output_format {
-            OutputFormat::BAM => bam_search(self, options).await.map_err(SearchFeaturesError::from),
-            OutputFormat::BIGWIG => bigwig_search(self, options).await.map_err(SearchFeaturesError::from),
-            OutputFormat::BIGBED => bigbed_search(self, options).await.map_err(SearchFeaturesError::from),
-            OutputFormat::VCF
-            | OutputFormat::BED
-            | OutputFormat::BEDGRAPH
-            | OutputFormat::GFF
-            | OutputFormat::GTF => tabix_search(self, options).await.map_err(SearchFeaturesError::from),
-            OutputFormat::FASTA => fasta_search(self, options).await.map_err(SearchFeaturesError::from),
-            _ => Err(SearchFeaturesError::String(
-                "Output format is not supported for file search".into(),
-            )),
-        };
+/// Searches for features in a file based on the provided search options.
+///
+/// Dispatches to the format-specific search function indicated by
+/// [`SearchOptions::output_format`] and reuses this `StoreService`'s cached
+/// object_store clients for every backend access.
+pub async fn search_features(
+    store: &StoreService,
+    options: &SearchOptions,
+) -> Result<SearchResult, SearchFeaturesError> {
+    let result = match options.output_format {
+        OutputFormat::BAM => bam_search(store, options).await.map_err(SearchFeaturesError::from),
+        OutputFormat::BIGWIG => bigwig_search(store, options).await.map_err(SearchFeaturesError::from),
+        OutputFormat::BIGBED => bigbed_search(store, options).await.map_err(SearchFeaturesError::from),
+        OutputFormat::VCF
+        | OutputFormat::BED
+        | OutputFormat::BEDGRAPH
+        | OutputFormat::GFF
+        | OutputFormat::GTF => tabix_search(store, options).await.map_err(SearchFeaturesError::from),
+        OutputFormat::FASTA => fasta_search(store, options).await.map_err(SearchFeaturesError::from),
+        _ => Err(SearchFeaturesError::String(
+            "Output format is not supported for file search".into(),
+        )),
+    };
 
-        result.map_err(|e| SearchFeaturesError::String(format!("Error searching file: {}", e)))
-    }
+    result.map_err(|e| SearchFeaturesError::String(format!("Error searching file: {}", e)))
 }

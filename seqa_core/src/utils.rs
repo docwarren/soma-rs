@@ -12,48 +12,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use std::path::absolute;
 
 use crate::api::output_format::OutputFormat;
 use crate::genome::get_longest_possible_genome;
-use std::num::ParseIntError;
-use std::path::absolute;
-use thiserror::Error;
-
-/// Top-level error type returned by the utility functions in this module.
-#[derive(Debug, Error)]
-pub enum UtilError {
-    #[error("{0}")]
-    FormatError(#[from] FormatError),
-
-    #[error("{0}")]
-    ExtensionError(#[from] ExtensionError),
-
-    #[error("Error converting to absolute path: {0}")]
-    AbsolutePathError(#[from] std::io::Error),
-}
-
-/// Errors related to invalid coordinate strings or search option values.
-#[derive(Debug, Error)]
-pub enum FormatError {
-    #[error("Invalid options format: {0}")]
-    InvalidOptions(String),
-
-    #[error("Invalid Coordinate string format")]
-    InvalidCoordinateFormat(String),
-
-    #[error("Error parsing coordinates: {0}")]
-    ParseIntError(#[from] ParseIntError),
-}
-
-/// Errors related to inferring index paths or output formats from file extensions.
-#[derive(Debug, Error)]
-pub enum ExtensionError {
-    #[error("Error determining index path: {0}")]
-    IndexPathError(String),
-
-    #[error("Error determining file type: {0}")]
-    PathTypeError(String),
-}
+pub(crate) use crate::util_error::{ExtensionError, UtilError};
+use crate::util_error::FormatError;
 
 /// Normalises a file path to a URI accepted by [`crate::stores::StoreService`].
 ///
@@ -69,9 +33,7 @@ pub fn format_file_path(file_path: &str) -> Result<String, UtilError> {
         match std::fs::exists(file_path) {
             Ok(true) => (),
             Ok(false) => {
-                return Err(UtilError::FormatError(FormatError::InvalidOptions(
-                    format!("File path does not exist: {}", file_path),
-                )));
+                return Err(UtilError::FileNotFound(file_path.to_string()));
             }
             Err(e) => return Err(UtilError::AbsolutePathError(e)),
         }

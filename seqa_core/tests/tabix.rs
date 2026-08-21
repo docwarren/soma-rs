@@ -12,8 +12,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use seqa_core::indexes::index_cache::delete_local_index;
+use seqa_core::api::search_options::SearchOptions;
+use seqa_core::stores::StoreService;
+use seqa_core::api::search::search_features;
+use seqa_core::indexes::index_cache::{delete_local_index, get_local_index_path};
+use seqa_core::tabix::tabix_search::tabix_search;
 
 const S3_VCF: &str = "s3://com.gmail.docarw/test_data/NA12877.EVA.vcf.gz";
 const S3_VCF_INDEX: &str = "s3://com.gmail.docarw/test_data/NA12877.EVA.vcf.gz.tbi";
@@ -26,18 +29,16 @@ const AZ_VCF_INDEX: &str = "az://genreblobs/genre-test-data/NA12877.EVA.vcf.gz.t
 const GCS_VCF: &str = "gs://genre_test_bucket/NA12877.EVA.vcf.gz";
 const GCS_VCF_INDEX: &str = "gs://genre_test_bucket/NA12877.EVA.vcf.gz.tbi";
 
+
 #[tokio::test]
 async fn vcf_chr1() {
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
     let options = SearchOptions::new(S3_VCF, "chr1:1-500000")
         .set_index_path(S3_VCF_INDEX)
         .set_output_format("vcf")
         .set_include_header(false);
 
     let store_service = StoreService::new();
-    let result = store_service.search_features(&options).await.expect(&format!("Failed to search VCF for chr1: {}", options.chromosome));
+    let result = search_features(&store_service, &options).await.expect(&format!("Failed to search VCF for chr1: {}", options.chromosome));
     assert_eq!(result.lines.len(), 14);
     assert_eq!(result.lines[0], "chr1	116549	.	C	T	.	SuspiciousHomAlt	MTD=bwa_freebayes	GT	1|1");
     assert_eq!(result.lines[13], "chr1	356537	.	G	A	.	SuspiciousHomAlt	MTD=cgi	GT	1|1");
@@ -46,9 +47,6 @@ async fn vcf_chr1() {
 
 #[tokio::test]
 async fn vcf_chr12() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
 
     let options = SearchOptions::new(S3_VCF, "chr12:1-120000")
         .set_index_path(S3_VCF_INDEX)
@@ -64,11 +62,7 @@ async fn vcf_chr12() {
 }
 
 #[tokio::test]
-async fn vcf_chrx() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
+async fn vcf_chr_x() {
     let options = SearchOptions::new(S3_VCF, "chrX:154927181-154929412")
         .set_index_path(S3_VCF_INDEX)
         .set_output_format("vcf")
@@ -84,10 +78,6 @@ async fn vcf_chrx() {
 
 #[tokio::test]
 async fn vcf_chr4() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
     let options = SearchOptions::new(S3_VCF, "chr4:4928400-4928402")
         .set_index_path(S3_VCF_INDEX)
         .set_output_format("vcf")
@@ -102,9 +92,6 @@ async fn vcf_chr4() {
 
 #[tokio::test]
 async fn vcf_many_lines() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
 
     let options = SearchOptions::new(S3_VCF, "chr1:100000000-200000000")
         .set_index_path(S3_VCF_INDEX)
@@ -121,9 +108,6 @@ async fn vcf_many_lines() {
 
 #[tokio::test]
 async fn cnv_vcf_chr_12() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
 
     let options = SearchOptions::new(S3_CNV_VCF, "chr12")
         .set_index_path(S3_CNV_VCF_INDEX)
@@ -142,8 +126,6 @@ async fn cnv_vcf_chr_12() {
 
 #[tokio::test]
 async fn gff_test() {
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
 
     let options = SearchOptions::new(S3_GTF, "chr1:1-100000000")
         .set_index_path(S3_GTF_INDEX)
@@ -153,16 +135,13 @@ async fn gff_test() {
         .set_include_header(false);
 
     let store_service = StoreService::new();
-    let result = store_service.search_features(&options).await.expect(&format!("Failed to search GFF for chr1: {}", options.chromosome));
+    let result = search_features(&store_service, &options).await.expect(&format!("Failed to search GFF for chr1: {}", options.chromosome));
     assert_eq!(result.lines.len(), 31);
     delete_local_index(S3_GTF_INDEX);
 }
 
 #[tokio::test]
 async fn gtf_test() {
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
     let options = SearchOptions::new(S3_GTF, "chr1:1-100000000")
         .set_index_path(S3_GTF_INDEX)
         .set_chromosome("chr1")
@@ -172,17 +151,13 @@ async fn gtf_test() {
         .set_include_header(false);
 
     let store_service = StoreService::new();
-    let result = store_service.search_features(&options).await.expect(&format!("Failed to search GTF for chr1: {}", options.chromosome));
+    let result = search_features(&store_service, &options).await.expect(&format!("Failed to search GTF for chr1: {}", options.chromosome));
     assert_eq!(result.lines.len(), 31);
     delete_local_index(S3_GTF_INDEX);
 }
 
 #[tokio::test]
 async fn azure_vcf() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
     let options = SearchOptions::new(AZ_VCF, "chr1:100000000-200000000")
         .set_index_path(AZ_VCF_INDEX)
         .set_coordinates("chr1:100000000-200000000")
@@ -199,10 +174,6 @@ async fn azure_vcf() {
 
 #[tokio::test]
 async fn gc_vcf() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
     let options = SearchOptions::new(GCS_VCF, "chr1:100000000-200000000")
         .set_file_path(GCS_VCF)
         .set_index_path(GCS_VCF_INDEX)
@@ -221,11 +192,6 @@ async fn gc_vcf() {
 #[tokio::test]
 #[serial_test::serial(bedgraph_cache)]
 async fn no_cache_does_not_write_index_file() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::indexes::index_cache::get_local_index_path;
-    use seqa_core::stores::StoreService;
-
     let no_cache_file = "s3://com.gmail.docarw/test_data/test.bedgraph.gz";
     let no_cache_index = "s3://com.gmail.docarw/test_data/test.bedgraph.gz.tbi";
 
@@ -250,10 +216,6 @@ async fn no_cache_does_not_write_index_file() {
 
 #[tokio::test]
 async fn http_vcf() {
-    use seqa_core::api::tabix_search::tabix_search;
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
     let http_vcf = "https://s3.us-west-1.amazonaws.com/com.gmail.docarw/test_data/NA12877.EVA.vcf.gz";
     let http_vcf_index = "https://s3.us-west-1.amazonaws.com/com.gmail.docarw/test_data/NA12877.EVA.vcf.gz.tbi";
 
@@ -275,9 +237,6 @@ async fn http_vcf() {
 #[tokio::test]
 #[serial_test::serial(bedgraph_cache)]
 async fn bedgraph_test() {
-    use seqa_core::api::search_options::SearchOptions;
-    use seqa_core::stores::StoreService;
-
     let bedgraph = "s3://com.gmail.docarw/test_data/test.bedgraph.gz";
     let bedgraph_index = "s3://com.gmail.docarw/test_data/test.bedgraph.gz.tbi";
 
@@ -289,7 +248,7 @@ async fn bedgraph_test() {
         .set_include_header(false);
 
     let store_service = StoreService::new();
-    let result = store_service.search_features(&options).await.expect("Failed to search BEDGRAPH for chr1");
+    let result = search_features(&store_service, &options).await.expect("Failed to search BEDGRAPH for chr1");
     assert_eq!(result.lines.len(), 5860);
     delete_local_index(bedgraph_index);
 }

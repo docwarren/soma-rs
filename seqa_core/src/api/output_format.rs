@@ -13,14 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::{ Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::models::bedgraph::BedGraphLine;
-use crate::models::vcf::VcfLine;
-use crate::models::bed::BedLine;
+use crate::tabix::bed::BedLine;
+use crate::tabix::bedgraph::BedGraphLine;
+use crate::tabix::gff::GffLine;
+use crate::tabix::gtf::GtfLine;
+use crate::tabix::vcf::VcfLine;
 use crate::traits::feature::Feature;
-use crate::models::gff::GffLine;
-use crate::models::gtf::GtfLine;
 
 /// The genomic file format being queried.
 ///

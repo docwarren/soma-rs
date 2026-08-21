@@ -73,3 +73,9 @@ pub mod services;
 
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+pub mod bam;
+pub mod bigwig;
+pub mod fasta;
+pub mod tabix;
+pub mod constants;
+pub mod util_error;

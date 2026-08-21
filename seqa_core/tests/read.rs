@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use seqa_core::models::bam::read::Read;
+use seqa_core::bam::read::Read;
 
 #[cfg(test)]
 mod init_mock_ref_tests {
