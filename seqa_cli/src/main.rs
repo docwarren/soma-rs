@@ -14,15 +14,15 @@
 // limitations under the License.
 
 use clap::{Parser, Subcommand};
-use seqa_core::api::search::SearchFeaturesError;
 use seqa_core::api::search_options::SearchOptions;
 use seqa_core::sqlite::{self, genes::{self, GeneError}};
 use seqa_core::stores::StoreService;
-use seqa_core::utils::ExtensionError;
 use std::io::{self, Write};
 use thiserror::Error;
 use log::{debug, error};
-
+use seqa_core::api::search::search_features;
+use seqa_core::api::search_error::SearchFeaturesError;
+use seqa_core::util_error::ExtensionError;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -226,7 +226,7 @@ async fn search(
     store_service: &StoreService,
     options: &SearchOptions,
 ) -> Result<Vec<String>, ApiError> {
-    let search_result = store_service.search_features(options).await?;
+    let search_result = search_features(store_service, options).await?;
     Ok(search_result.lines)
 }
 

@@ -24,16 +24,16 @@ use axum::{
 };
 use serde::Serialize;
 use seqa_core::api::output_format::OutputFormat;
-use seqa_core::api::search::SearchFeaturesError;
 use seqa_core::api::search_options::SearchOptions;
 use seqa_core::models::cytoband::Cytoband;
 use seqa_core::models::gene_coordinate::GeneCoordinate;
 use seqa_core::sqlite::{self, genes::{self, GeneError}};
 use seqa_core::stores::StoreService;
-use seqa_core::utils::UtilError;
 use thiserror::Error;
 use tower_http::cors::CorsLayer;
-
+use seqa_core::api::search::search_features;
+use seqa_core::api::search_error::SearchFeaturesError;
+use seqa_core::util_error::UtilError;
 use crate::cache::AppCache;
 use crate::search::models::SearchRequest;
 
@@ -129,7 +129,7 @@ async fn index() -> &'static str {
     "Hello world"
 }
 
-async fn search_features(
+async fn feature_search(
     State(state): State<AppState>,
     payload: Result<Json<SearchRequest>, JsonRejection>,
 ) -> Result<String, ApiError> {
@@ -155,7 +155,7 @@ async fn search_features(
 
     let mut search_options = SearchOptions::new(&request.path, &request.coordinates);
     populate_from_cache(&state.cache, &mut search_options).await;
-    let result = state.store.search_features(&search_options).await?;
+    let result = search_features(&state.store, &search_options).await?;
     write_back_to_cache(&state.cache, &search_options, &result).await;
 
     Ok(result.lines.into_iter().collect::<Vec<String>>().join("\n"))
@@ -279,7 +279,7 @@ pub fn app() -> Router {
 
     Router::new()
         .route("/", get(index))
-        .route("/search", post(search_features))
+        .route("/search", post(feature_search))
         .route("/files", post(list_dir))
         .route("/genes/symbols/{genome}", get(get_gene_symbols))
         .route("/genes/coordinates/{genome}/{gene}", get(get_coordinates))

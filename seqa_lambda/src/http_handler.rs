@@ -16,6 +16,7 @@
 use lambda_http::http::Method;
 use lambda_http::{Body, Error, Request, RequestPayloadExt, Response};
 use ::serde::{ Serialize, Deserialize };
+use seqa_core::api::search::search_features;
 use seqa_core::api::search_options::{CigarFormat, SearchOptions};
 use seqa_core::sqlite::{self, genes};
 use seqa_core::stores::StoreService;
@@ -73,7 +74,7 @@ async fn search_handler(event: Request) -> Result<Response<Body>, Error> {
     };
 
     let store = StoreService::new();
-        let result = store.search_features(&options).await?;
+        let result = search_features(&store, &options).await?;
         let lines = serde_json::to_string(&result.lines)?;
 
         Ok(Response::builder()
