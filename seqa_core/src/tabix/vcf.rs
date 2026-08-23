@@ -162,7 +162,7 @@ impl Display for VcfLine {
         let info = self
             .info
             .iter()
-            .map(|(k, v)| if v.is_empty() { format!("{}", k) } else { format!("{}={}", k, v) })
+            .map(|(k, v)| if v.is_empty() { k.to_string() } else { format!("{}={}", k, v) })
             .collect::<Vec<String>>()
             .join(";");
 
@@ -218,8 +218,8 @@ impl Feature for VcfLine {
         let prefix_len = self.prefix_len().unwrap_or(0);
 
         match variant_type {
-            SnvType::INSERTION => self.position + prefix_len - 1 as u32,
-            SnvType::DELETION => self.position + prefix_len - 1 as u32,
+            SnvType::INSERTION => self.position + prefix_len - 1u32,
+            SnvType::DELETION => self.position + prefix_len - 1u32,
             SnvType::SUBSTITUTION => self.position,
         }
     }

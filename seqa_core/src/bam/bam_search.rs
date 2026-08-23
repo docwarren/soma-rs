@@ -12,7 +12,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use crate::api::search::{init_fetch_handles, join_fetch_handles};
 use crate::api::search_options::{CigarFormat, SearchOptions};
 use crate::api::search_result::SearchResult;
@@ -73,9 +72,10 @@ pub async fn bam_search(
     let mut result = SearchResult::new();
 
     if options.end - options.begin > 200_000 {
-        return Err(BamError::DataProcessingError(
-            "Requested range is too large; please limit to 100,000 bases.".into(),
-        ));
+        return Err(BamError::InvalidRequest {
+            requested: format!("{}:{}-{}", options.chromosome, options.begin, options.end),
+            reason: "Bam query size limited to 200k bases".to_string()
+        });
     }
 
     let bai = match &options.bam_index {
@@ -112,8 +112,15 @@ pub async fn bam_search(
 
     let chr_idx = &bai.references[chr_i as usize];
     let chunks = bai.get_optimized_chunks(&chr_idx, bin_numbers, &options);
-    let chunk_handles = init_fetch_handles(store_service, &options, &chunks).await?;
-    let raw_data = join_fetch_handles(chunk_handles).await?;
+
+    let chunk_handles = init_fetch_handles(store_service, &options, &chunks)
+        .await
+        .map_err(|e| BamError::FetchError { source: e })?;
+
+    let raw_data = join_fetch_handles(chunk_handles)
+        .await
+        .map_err(|e| BamError::DecompressionError { source: e })?;
+
     result.lines = {
         match data_to_lines(&raw_data.concat(), options, bam_header) {
             Ok((_, lines)) => {

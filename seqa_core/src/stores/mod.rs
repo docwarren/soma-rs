@@ -56,7 +56,7 @@ impl StoreService {
 
     // For http paths that are not object store paths, we return the whole URL.
     fn get_bucket_from_path(path: &str) -> Result<String, StoreError> {
-        let url = Url::parse(&path)?;
+        let url = Url::parse(path)?;
         let scheme = url.scheme();
         let (obj_scheme, _) = Self::get_obj_scheme_and_path(path)?;
 
@@ -200,7 +200,7 @@ impl StoreService {
     /// Get file path
     /// Gets a Path object from the string supplied.
     pub fn get_obj_scheme_and_path(path: &str) -> Result<(ObjectStoreScheme, ObjectStorePath), StoreError> {
-        let url = Url::parse(&path)?;
+        let url = Url::parse(path)?;
 
         match ObjectStoreScheme::parse(&url) {
             Ok((scheme, path)) => {

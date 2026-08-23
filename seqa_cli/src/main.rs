@@ -21,7 +21,7 @@ use std::io::{self, Write};
 use thiserror::Error;
 use log::{debug, error};
 use seqa_core::api::search::search_features;
-use seqa_core::api::search_error::SearchFeaturesError;
+use seqa_core::api::search_error::SearchError;
 use seqa_core::util_error::ExtensionError;
 
 #[derive(Parser, Debug)]
@@ -105,7 +105,7 @@ enum GeneCommands {
 #[derive(Error, Debug)]
 pub enum ApiError {
     #[error("Search Error: {0}")]
-    SearchError(#[from] SearchFeaturesError),
+    SearchError(#[from] SearchError),
 
     #[error("Extension Error: {0}")]
     ExtensionError(#[from] ExtensionError),

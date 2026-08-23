@@ -26,7 +26,7 @@ use crate::tabix::bedgraph::BedGraphLine;
 use crate::tabix::gff::GffLine;
 use crate::tabix::gtf::GtfLine;
 use crate::tabix::tabix::Tabix;
-use crate::tabix::tabix_error::TabixSearchError;
+use crate::tabix::tabix_error::TabixError;
 use crate::tabix::tabix_header::TabixHeader;
 use crate::tabix::vcf::VcfLine;
 use crate::traits::sam_index::SamIndex;
@@ -51,7 +51,7 @@ pub fn data_to_lines(data: &Vec<u8>, options: &SearchOptions) -> Vec<String> {
 
     line_strings
         .iter()
-        .map(|line| model_new(&line))
+        .map(|line| model_new(line))
         .filter_map(|line| match line {
             Ok(feature) => Some(feature),
             Err(e) => {
@@ -76,7 +76,7 @@ pub fn data_to_lines(data: &Vec<u8>, options: &SearchOptions) -> Vec<String> {
 pub async fn tabix_search(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<SearchResult, TabixSearchError> {
+) -> Result<SearchResult, TabixError> {
     let mut result = SearchResult::new();
 
     let tabix = match &options.tabix_index {
@@ -100,27 +100,35 @@ pub async fn tabix_search(
     }
 
     let bin_numbers = get_bin_numbers(options.begin, options.end);
-    let chr_i = tabix.get_chromosome_index_by_name(&options.chromosome);
-    let chr_i = match chr_i {
-        Some(i) => i as u32,
-        None => {
-            return Err(TabixSearchError::SearchError(format!(
-                "Chromosome {} not found in index",
-                options.chromosome
-            )));
-        }
-    };
+
+    let chr_i = tabix.get_chromosome_index_by_name(&options.chromosome)
+        .ok_or(TabixError::InvalidRequest {
+            reason: format!("Chromosome not found in index: {}", options.chromosome),
+            request: format!("{}:{}-{}", options.chromosome, options.begin, options.end)
+        })?;
+
     let chr_idx = &tabix.references[chr_i as usize];
     let chunks = tabix.get_optimized_chunks(&chr_idx, bin_numbers, &options);
-    let chunk_handles = init_fetch_handles(store_service, &options, &chunks).await?;
-    let raw_data = join_fetch_handles(chunk_handles).await?;
-    let lines = data_to_lines(&raw_data.concat(), &options);
 
+    let chunk_handles = init_fetch_handles(store_service, &options, &chunks)
+        .await
+        .map_err(|e| TabixError::ReadError {
+            description: "Error fetching data".to_string(),
+            source: e
+        })?;
+
+    let raw_data = join_fetch_handles(chunk_handles)
+        .await
+        .map_err(|e| TabixError::CompressionError {
+            description: "Error decompressing data".to_string(),
+            source: e
+        })?;
+
+    let lines = data_to_lines(&raw_data.concat(), &options);
     let mut all_lines = get_header_lines(options, &tabix_header);
     all_lines.extend(lines);
     result.lines = all_lines;
-    return Ok(result);
-
+    Ok(result)
 }
 
 /// Searches for data in a vcf file using the provided search options.
@@ -133,7 +141,7 @@ pub async fn tabix_search(
 pub async fn tabix_search_vcf(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<Vec<VcfLine>, TabixSearchError> {
+) -> Result<Vec<VcfLine>, TabixError> {
     let tabix_result = tabix_search(store_service, options).await?;
     let mut vcf_lines = Vec::new();
 

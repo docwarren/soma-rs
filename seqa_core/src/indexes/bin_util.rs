@@ -15,7 +15,7 @@
 
 use super::constants::MAX_BIN_SIZE;
 
-fn update_bins(mut k: u32, max_k: u32, bins: &mut [u32; MAX_BIN_SIZE], i: &mut usize) -> () {
+fn update_bins(mut k: u32, max_k: u32, bins: &mut [u32; MAX_BIN_SIZE], i: &mut usize) {
     while k <= max_k && *i < MAX_BIN_SIZE {
         bins[*i] = k;
         k += 1;
@@ -49,7 +49,7 @@ pub fn region_to_bins(begin: u32, end: u32, bins: &mut [u32; MAX_BIN_SIZE]) -> u
     let max_k: u32 = 4681 + (end >> 14);
     update_bins(k, max_k, bins, &mut i);
 
-    i as usize
+    i
 }
 
 pub fn get_bin_numbers(begin: u32, end: u32) -> Vec<u32> {

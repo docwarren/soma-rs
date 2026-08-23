@@ -15,7 +15,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
 use crate::codecs::bgzip;
 use crate::indexes::bin;
 use crate::indexes::chr_idx::ChrIdx;
@@ -40,6 +39,12 @@ pub struct Tabix {
     pub references: Vec<ChrIdx>,
     pub n_no_coor: u64,
     pub first_feature_offset: VirtualOffset
+}
+
+impl Default for Tabix {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Tabix {
@@ -78,15 +83,26 @@ impl Tabix {
         let bytes = crate::indexes::index_cache::get_or_download_index(
             store_service,
             idx_path,
-            no_cache
-        ).await?;
-        Ok(Tabix::from_compressed_bytes(bytes)?)
+            no_cache)
+            .await
+            .map_err(|e| TabixError::ReadError {
+                description: format!("Could not fetch index file from cache or path {}", idx_path),
+                source: e
+            })?;
+        Tabix::from_compressed_bytes(bytes)
     }
 
     pub fn from_compressed_bytes(bytes: Vec<u8>) -> Result<Self, TabixError> {
-        let block_sizes = bgzip::from_bytes(&bytes)?;
-        let decompressed = bgzip::decompress(&block_sizes, &bytes)?;
-        Ok(Tabix::from_bytes(decompressed)?)
+        let block_sizes = bgzip::from_bytes(&bytes).map_err(|e| TabixError::CompressionError {
+            source: e,
+            description: "Error reading bgzip block from bytes".to_string()
+        })?;
+        let decompressed = bgzip::decompress(&block_sizes, &bytes)
+            .map_err(|e| TabixError::CompressionError {
+                source: e,
+                description: "Error decompressing bytes".to_string()
+            })?;
+        Tabix::from_bytes(decompressed)
     }
 
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, TabixError> {
@@ -122,10 +138,8 @@ impl Tabix {
             .collect();
 
         // Remove the last empty string if it exists
-        if let Some(last) = tabix.names.last() {
-            if last.is_empty() {
-                tabix.names.pop();
-            }
+        if let Some(last) = tabix.names.last() && last.is_empty() {
+            tabix.names.pop();
         }
 
         i += tabix.l_nm as usize;
@@ -156,7 +170,9 @@ impl Tabix {
                 let mut chunks = Vec::with_capacity(n_chunk as usize);
 
                 for _ in 0..n_chunk {
-                    let chunk = Chunk::from_bytes(&bytes[i..i + 16], tabix_bin.bin)?;
+                    let chunk = Chunk::from_bytes(&bytes[i..i + 16], tabix_bin.bin).map_err(|e| TabixError::ChunkError {
+                        source: e,
+                    })?;
                     i += 16; // Each chunk is 16 bytes (8 for begin, 8 for end)
                     chunks.push(chunk);
 

@@ -1,44 +1,40 @@
-use crate::api::search::SearchError;
-use crate::codecs::codec_error::CodecError;
-use crate::indexes::chunk::ChunkError;
-use crate::stores::error::StoreError;
-use crate::tabix::tabix_header::TabixHeaderError;
+use thiserror::Error;
 use std::array::TryFromSliceError;
 use std::string::FromUtf8Error;
-use thiserror::Error;
+use crate::stores::error::StoreError;
+use crate::codecs::codec_error::CodecError;
+use crate::indexes::chunk::ChunkError;
 
 #[derive(Debug, Error)]
 pub enum TabixError {
-    #[error("Failed to read Tabix index file: {0}")]
-    ReadError(String),
+    #[error("Error reading from file")]
+    ReadError {
+        description: String,
+        #[source]
+        source: StoreError
+    },
 
-    #[error("Failed to parse Tabix index file: {0}")]
-    ParseError(#[from] FromUtf8Error),
+    #[error("Error decompressing")]
+    CompressionError {
+        description: String,
+        source: CodecError
+    },
 
-    #[error("Failed to decompress Tabix index file: {0}")]
-    DecompressError(#[from] CodecError),
+    #[error("Invalid Request {request} caused by {reason}")]
+    InvalidRequest {
+        request: String,
+        reason: String
+    },
 
-    #[error("Store error: {0}")]
-    StoreError(#[from] StoreError),
+    #[error("Error parsing bytes")]
+    ByteParsingError(#[from] TryFromSliceError),
 
-    #[error("Parsing Error: {0}")]
-    ParsingError(#[from] TryFromSliceError),
+    #[error("Error parsing utf8")]
+    Utf8ParseError(#[from] FromUtf8Error),
 
-    #[error("Chunk Error: {0}")]
-    ChunkError(#[from] ChunkError),
-}
-
-#[derive(Debug, Error)]
-pub enum TabixSearchError {
-    #[error("Search error: {0}")]
-    SearchError(String),
-
-    #[error("Tabix index error: {0}")]
-    TabixIndexError(#[from] TabixError),
-
-    #[error("async threads error: {0}")]
-    AsyncThreadsError(#[from] SearchError),
-
-    #[error("Failed to read tabix header: {0}")]
-    FailedToReadTabixHeader(#[from] TabixHeaderError),
+    #[error("Error parsing chunk")]
+    ChunkError {
+        #[source]
+        source: ChunkError
+    }
 }

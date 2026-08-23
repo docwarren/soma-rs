@@ -15,33 +15,22 @@
 
 use std::ops::Range;
 use serde::{ Serialize, Deserialize};
-use thiserror::Error;
 
 use crate::codecs::bgzip;
-use crate::codecs::codec_error::CodecError;
 use crate::indexes::constants::MAX_BLOCK_SIZE;
 use crate::indexes::virtual_offset::VirtualOffset;
-use crate::stores::error::StoreError;
 use crate::stores::StoreService;
-
-#[derive(Debug, Error)]
-pub enum TabixHeaderError {
-    #[error("Failed to read Tabix header file: {0}")]
-    ReadError(String),
-
-    #[error("StoreError: {0}")]
-    StoreError(#[from] StoreError),
-
-    #[error("BgZip Error: {0}")]
-    BgZipError(#[from] CodecError),
-
-    #[error("Parsing Error: {0}")]
-    ParsingError(#[from] core::array::TryFromSliceError),
-}
+use crate::tabix::tabix_error::TabixError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TabixHeader {
     lines: Vec<String>,
+}
+
+impl Default for TabixHeader {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TabixHeader {
@@ -53,16 +42,29 @@ impl TabixHeader {
         store: &StoreService,
         file_path: &str,
         first_vp: VirtualOffset,
-    ) -> Result<Self, TabixHeaderError> {
+    ) -> Result<Self, TabixError> {
         let compressed_bytes = store
             .get_range(file_path, Range {
                 start: 0u64,
-                end: first_vp.block_offset as u64 + MAX_BLOCK_SIZE,
+                end: first_vp.block_offset + MAX_BLOCK_SIZE,
             })
-            .await?;
+            .await
+            .map_err(|e| TabixError::ReadError {
+                source: e,
+                description: "Unable to fetch header".to_string()
+            })?;
 
-        let block_sizes = bgzip::from_bytes(&compressed_bytes)?;
-        let bytes = bgzip::decompress(&block_sizes, &compressed_bytes)?;
+        let block_sizes = bgzip::from_bytes(&compressed_bytes)
+            .map_err(|e| TabixError::CompressionError {
+                description: "Error reading bgzip block for header".to_string(),
+                source: e
+            })?;
+
+        let bytes = bgzip::decompress(&block_sizes, &compressed_bytes)
+            .map_err(|e| TabixError::CompressionError {
+                description: "Error decompressing header".to_string(),
+                source: e
+            })?;
         let header_str = String::from_utf8_lossy(&bytes);
 
         let lines = header_str.lines()

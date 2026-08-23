@@ -23,7 +23,7 @@ pub trait OptimiseOffsets {
     /// Optimise interval offsets by merging offsets that are close together.
     /// This can help reduce the number of intervals and make the index more efficient.
     fn optimise_offsets(&mut self) -> Result<(), String> {
-        for (_, offsets) in self.get_offset_map().iter_mut() {
+        for offsets in self.get_offset_map().values_mut() {
             if offsets.is_empty() {
                 continue;
             }
@@ -32,7 +32,7 @@ pub trait OptimiseOffsets {
             offset_vec.sort();
 
             let mut merged_offsets = HashSet::new();
-            let mut last_offset = *offset_vec.first().ok_or_else(|| format!("Error optimising offsets"))?;
+            let mut last_offset = *offset_vec.first().ok_or_else(|| "Error optimising offsets".to_string())?;
 
             for &offset in offset_vec.iter() {
                 if offset - last_offset <= MIN_SEARCH_BLOCK_BYTES {

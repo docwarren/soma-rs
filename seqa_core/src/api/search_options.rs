@@ -244,7 +244,7 @@ impl SearchOptions {
     /// Falls back to [`OutputFormat::VCF`] if the name is unrecognised.
     pub fn set_output_format(&mut self, output_format: &str) -> Self {
         let format = output_format.to_lowercase();
-        self.output_format = OutputFormat::from_str(&format).unwrap_or(OutputFormat::VCF);
+        self.output_format = OutputFormat::get_enum(&format).unwrap_or(OutputFormat::VCF);
         self.clone()
     }
 

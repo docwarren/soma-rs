@@ -1,34 +1,55 @@
-use std::array::TryFromSliceError;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use crate::stores::error::StoreError;
 
 #[derive(Debug, Error)]
-pub enum FastaSearchError {
-    #[error("FAI index error: {0}")]
-    FaiIndexError(#[from] FaiIndexError),
+pub enum FastaError {
+    #[error("Invalid range request ({requested}) => {reason}")]
+    InvalidRequest {
+        requested: String,
+        reason: String
+    },
 
-    #[error("UTF-8 Error: {0}")]
-    Utf8Error(#[from] std::string::FromUtf8Error),
+    #[error("FAI index error")]
+    IndexError {
+        file_path: String,
+        #[source]
+        source: FaiIndexError
+    },
 
-    #[error("Store Error: {0}")]
-    StoreError(#[from] StoreError),
+    #[error("Error fetching requested data for {file_path}")]
+    FetchError {
+        file_path: String,
+        #[source]
+        source: StoreError
+    },
 
-    #[error("Failed to read FASTA file: {0}")]
-    FailedToReadFastaFile(String),
+    #[error("Error parsing fasta file: {file_path}")]
+    ParseError {
+        file_path: String,
+        #[source]
+        source: FromUtf8Error
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum FaiIndexError {
-    #[error("Failed to read FAI index file: {0}")]
-    ReadError(String),
+    #[error("Invalid request ({requested}) => {reason}")]
+    InvalidRequest {
+        requested: String,
+        reason: String
+    },
 
-    #[error("Store Error: {0}")]
-    StoreError(#[from] StoreError),
+    #[error("Error reading FAI index file: {file_path}")]
+    ReadError {
+        file_path: String,
+        #[source]
+        source: StoreError
+    },
 
-    #[error("Failed to parse FAI index file: {0}")]
-    ParseError(#[from] TryFromSliceError),
-
-    #[error("UTF-8 Error: {0}")]
-    Utf8Error(#[from] FromUtf8Error),
+    #[error("Error parsing FAI index file content")]
+    ParseError {
+        #[source]
+        source: FromUtf8Error
+    }
 }

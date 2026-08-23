@@ -15,7 +15,7 @@
 
 use crate::api::search_options::SearchOptions;
 use crate::api::search_result::SearchResult;
-use crate::fasta::fasta_error::FastaSearchError;
+use crate::fasta::fasta_error::FastaError;
 use crate::stores::StoreService;
 use std::ops::Range;
 use crate::fasta::fai::FaiIndex;
@@ -30,24 +30,43 @@ use crate::fasta::fai::FaiIndex;
 pub async fn fasta_search(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<SearchResult, FastaSearchError> {
+) -> Result<SearchResult, FastaError> {
     let mut result = SearchResult::new();
 
-    if options.end - options.begin > 100_000 {
-        return Err(FastaSearchError::FailedToReadFastaFile(
-            "Requested range is too large; please limit to 100,000 bases.".into(),
-        ));
+    if options.end - options.begin > 250_000_000 {
+        return Err(FastaError::InvalidRequest {
+            requested: format!("{}:{}-{}", options.chromosome, options.begin, options.end),
+            reason: "Maximum query size for fasta files 250MBases".to_string()
+        });
     }
+
     let index = match &options.fasta_index {
         Some(index) => index,
-        None => &FaiIndex::from_file(store_service, &options.index_path).await?
+        None => &FaiIndex::from_file(store_service, &options.index_path)
+            .await
+            .map_err(|e| FastaError::IndexError {
+                source: e,
+                file_path: options.index_path.to_string()
+            })?
     };
     result.fasta_index = Some(index.clone());
 
-    let byte_range: Range<u64> = index.get_offsets(&options)?;
+    let byte_range: Range<u64> = index.get_offsets(options).map_err(|e| FastaError::IndexError {
+        source: e,
+        file_path: options.index_path.to_string()
+    })?;
 
-    let bytes = store_service.get_range(&options.file_path, byte_range).await?;
-    let line_string = String::from_utf8(bytes)?;
+    let bytes = store_service.get_range(&options.file_path, byte_range)
+        .await
+        .map_err(|e| FastaError::FetchError {
+            file_path: options.file_path.to_string(),
+            source: e
+        })?;
+
+    let line_string = String::from_utf8(bytes).map_err(|e| FastaError::ParseError {
+        file_path: options.file_path.to_string(),
+        source: e
+    })?;
     result.lines = line_string.lines()
         .map(|line| line.to_string())
         .collect::<Vec<String>>();

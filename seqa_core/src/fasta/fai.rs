@@ -47,14 +47,22 @@ impl FaiIndex {
         store_service: &StoreService,
         idx_path: &str,
     ) -> Result<Self, FaiIndexError> {
-        let bytes = store_service.get_object(idx_path).await?;
+        let bytes = store_service.get_object(idx_path)
+            .await
+            .map_err(|e| FaiIndexError::ReadError {
+                file_path: idx_path.to_string(),
+                source: e
+            })?;
 
         Ok(FaiIndex::from_bytes(bytes)?)
     }
 
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, FaiIndexError> {
         let mut fai_index = FaiIndex::new();
-        let lines = String::from_utf8(bytes)?;
+        let lines = String::from_utf8(bytes)
+            .map_err(|e| FaiIndexError::ParseError {
+                source: e
+            })?;
 
         for line in lines.lines() {
             if line.is_empty() || line.starts_with('#') {
@@ -85,9 +93,16 @@ impl FaiIndex {
         let contig = crate::genome::chromosome_aliases(&options.chromosome)
             .iter()
             .find_map(|alias| self.contigs.get(alias))
-            .ok_or(FaiIndexError::ReadError(format!("Contig not found: {}", options.chromosome)))?;
+            .ok_or(FaiIndexError::InvalidRequest {
+                reason: "Contig not found".to_string(),
+                requested: options.chromosome.to_string()
+            })?;
+
         if options.begin < 1 || options.end > contig.length as u32 {
-            return Err(FaiIndexError::ReadError(format!("Invalid coordinates: {}-{}", options.begin, options.end)));
+            return Err(FaiIndexError::InvalidRequest {
+                reason: "Invalid Coordinates".to_string(),
+                requested: format!("{}:{}-{}", options.chromosome, options.begin, options.end)
+            });
         }
         let start = Self::get_offset(options.begin, contig);
         let end = Self::get_offset(options.end, contig);

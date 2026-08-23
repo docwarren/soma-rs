@@ -26,8 +26,6 @@ use url::Url;
 /// For s3:// URLs, the bucket is the host (e.g. s3://bucket/key -> "bucket").
 /// For https:// S3 URLs, the bucket is the first path segment
 /// (e.g. https://s3.region.amazonaws.com/bucket/key -> "bucket").
-
-// S3
 pub fn get_s3_store_from_bucket(bucket: &str) -> Result<AmazonS3, StoreError> {
     match AmazonS3Builder::from_env()
         .with_bucket_name(bucket)

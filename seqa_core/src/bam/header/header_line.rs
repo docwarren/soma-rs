@@ -12,10 +12,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use crate::bam::header::bam_header_error::BamHeaderError;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use crate::bam::bam_error::BamError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeaderLine {
@@ -24,15 +23,15 @@ pub struct HeaderLine {
 }
 
 impl HeaderLine {
-    pub fn from_line(line: String) -> Result<HeaderLine, BamHeaderError> {
+    pub fn from_line(line: &str) -> Result<HeaderLine, BamError> {
         let tokens = line.split('\t').collect::<Vec<&str>>();
         if tokens.is_empty() {
-            return Err(BamHeaderError::InvalidHeaderLine(line));
+            return Err(BamError::HeaderParseError(line.to_string()));
         }
         let code = tokens[0].to_string();
         let mut tags = Vec::new();
         for token in tokens.iter().skip(1) {
-            let (key, value) = token.split_once(':').ok_or_else(|| BamHeaderError::InvalidHeaderLine(line.clone()))?;
+            let (key, value) = token.split_once(':').ok_or_else(|| BamError::HeaderParseError(line.to_string()))?;
             tags.push((key.to_string(), value.to_string()));
         }
         Ok(HeaderLine { code, tags })
@@ -60,8 +59,8 @@ mod test {
 
     #[test]
     fn it_should_init_from_string() {
-        let test_line1 = "@SQ\tSN:chr21\tLN:48129895".to_string();
-        let test_line2 = "@PG\tID:bwa\tPN:bwa\tVN:0.6.1-r104-tpx".to_string();
+        let test_line1 = "@SQ\tSN:chr21\tLN:48129895";
+        let test_line2 = "@PG\tID:bwa\tPN:bwa\tVN:0.6.1-r104-tpx";
 
         let expected_1 = test_line1.clone();
         let expected_2 = test_line2.clone();

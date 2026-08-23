@@ -32,7 +32,7 @@ use seqa_core::stores::StoreService;
 use thiserror::Error;
 use tower_http::cors::CorsLayer;
 use seqa_core::api::search::search_features;
-use seqa_core::api::search_error::SearchFeaturesError;
+use seqa_core::api::search_error::SearchError;
 use seqa_core::util_error::UtilError;
 use crate::cache::AppCache;
 use crate::search::models::SearchRequest;
@@ -75,7 +75,7 @@ pub enum ApiError {
     DatabaseError(String),
 
     #[error("Search error: {0}")]
-    SearchError(#[from] SearchFeaturesError),
+    SearchError(#[from] SearchError),
 
     #[error("SQLite error: {0}")]
     SqliteError(#[from] rusqlite::Error),

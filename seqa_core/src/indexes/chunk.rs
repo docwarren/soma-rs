@@ -28,7 +28,7 @@ pub enum ChunkError {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Chunk {
     pub bin_number: u32,
     pub begin_vp: VirtualOffset,
@@ -71,16 +71,6 @@ impl Chunk {
         );
 
         Ok(chunk)
-    }
-}
-
-impl Clone for Chunk {
-    fn clone(&self) -> Self {
-        Chunk {
-            bin_number: self.bin_number,
-            begin_vp: self.begin_vp.clone(),
-            end_vp: self.end_vp.clone()
-        }
     }
 }
 

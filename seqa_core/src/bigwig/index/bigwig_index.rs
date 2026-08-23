@@ -76,7 +76,7 @@ impl BigwigIndex {
         path_str: &str,
     ) -> Result<u64, BigwigIndexError> {
         match self.zoom_headers.first() {
-            Some(zoom) => Ok(zoom.index_offset as u64),
+            Some(zoom) => Ok(zoom.index_offset),
             None => Ok(store.get_file_size(path_str).await?),
         }
     }

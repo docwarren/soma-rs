@@ -12,8 +12,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use crate::bam::bai_error::BaiError;
 use crate::indexes::bin::Bin;
 use crate::indexes::chr_idx::ChrIdx;
 use crate::indexes::chunk::Chunk;
@@ -21,7 +19,7 @@ use crate::indexes::virtual_offset::VirtualOffset;
 use crate::stores::StoreService;
 use crate::traits::sam_index::SamIndex;
 use serde::{Deserialize, Serialize};
-
+use crate::bam::bam_error::BamError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaiIndex {
@@ -56,27 +54,22 @@ impl BaiIndex {
         store_service: &StoreService,
         idx_path: &str,
         no_cache: bool,
-    ) -> Result<Self, BaiError> {
+    ) -> Result<Self, BamError> {
         let bytes = crate::indexes::index_cache::get_or_download_index(
             store_service,
             idx_path,
             no_cache
-        ).await.map_err(|e| BaiError::ReadError {
-            path: idx_path.to_string(),
-            source: e
-        })?;
+        ).await.map_err(|e| BamError::IndexReadError { path: idx_path.to_string(), source: e })?;
         BaiIndex::from_bytes(bytes)
     }
 
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, BaiError> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, BamError> {
         let mut i = 0;
         let mut bai_index = BaiIndex::new();
 
         bai_index.magic.copy_from_slice(&bytes[i..i + 4]);
         i += 4;
-        bai_index.n_ref = u32::from_le_bytes(bytes[i..i + 4]
-            .try_into()
-            .map_err(|e| BaiError::ParsingError { source: e })?);
+        bai_index.n_ref = u32::from_le_bytes(bytes[i..i + 4].try_into()?);
         i += 4;
 
         // Read references
@@ -84,23 +77,16 @@ impl BaiIndex {
 
             let mut chr_idx = ChrIdx::new();
 
-            let n_bin = u32::from_le_bytes(bytes[i..i + 4]
-                .try_into()
-                .map_err(|e| BaiError::ParsingError { source: e })?);
+            let n_bin = u32::from_le_bytes(bytes[i..i + 4].try_into()?);
             i += 4;
 
             // Read bins
             for _ in 0..n_bin {
 
-                let bin_number = u32::from_le_bytes(bytes[i..i + 4]
-                    .try_into()
-                    .map_err(|e| BaiError::ParsingError { source: e })?);
-
+                let bin_number = u32::from_le_bytes(bytes[i..i + 4].try_into()?);
                 i += 4;
 
-                let n_chunk = u32::from_le_bytes(bytes[i..i + 4]
-                    .try_into()
-                    .map_err(|e| BaiError::ParsingError { source: e })?);
+                let n_chunk = u32::from_le_bytes(bytes[i..i + 4].try_into()?);
                 i += 4;
 
                 let mut chunks = Vec::with_capacity(n_chunk as usize);
@@ -108,7 +94,7 @@ impl BaiIndex {
                 // Read chunks for this bin
                 for _ in 0..n_chunk {
                     let chunk = Chunk::from_bytes(&bytes[i..i + 16], bin_number)
-                        .map_err(|e| BaiError::ChunkParsingError { source: e })?;
+                        .map_err(|e| BamError::ParseError { source: e })?;
                     i += 16;
                     chunks.push(chunk);
 
@@ -124,24 +110,18 @@ impl BaiIndex {
                 });
             }
 
-            let n_intv = u32::from_le_bytes(bytes[i..i + 4]
-                .try_into()
-                .map_err(|e| BaiError::ParsingError { source: e })?);
+            let n_intv = u32::from_le_bytes(bytes[i..i + 4].try_into()?);
             i += 4;
 
             // Read intervals
             for _ in 0..n_intv {
-                let interval = u64::from_le_bytes(bytes[i..i + 8]
-                    .try_into()
-                    .map_err(|e| BaiError::ParsingError { source: e })?);
+                let interval = u64::from_le_bytes(bytes[i..i + 8].try_into()?);
                 i += 8;
                 chr_idx.intervals.push(interval);
             }
             bai_index.references.push(chr_idx);
         }
-        bai_index.n_no_coor = u64::from_le_bytes(bytes[i..i + 8]
-            .try_into()
-            .map_err(|e| BaiError::ParsingError { source: e })?);
+        bai_index.n_no_coor = u64::from_le_bytes(bytes[i..i + 8].try_into()?);
 
         Ok(bai_index)
     }

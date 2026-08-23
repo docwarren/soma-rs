@@ -1,22 +1,48 @@
-use crate::bam::bai_error::BaiError;
-use crate::bam::header::bam_header_error::BamHeaderError;
+use std::array::TryFromSliceError;
 use thiserror::Error;
+use crate::codecs::codec_error::CodecError;
+use crate::indexes::chunk::ChunkError;
+use crate::stores::error::StoreError;
 
 #[derive(Debug, Error)]
 pub enum BamError {
+    #[error("Invalid range request ({requested}) => {reason}")]
+    InvalidRequest {
+        requested: String,
+        reason: String
+    },
 
-    #[error("Data processing error: {0}")]
-    DataProcessingError(String),
+    #[error("Error fetching bam data")]
+    FetchError {
+        #[source]
+        source: StoreError
+    },
+
+    #[error("Error decompressing data")]
+    DecompressionError {
+        #[source]
+        source: CodecError
+    },
 
     #[error("Chromosome not found: {0}")]
     ChromosomeNotFound(String),
 
-    #[error("Failed to read BAM header: {0}")]
-    HeaderError(#[from] BamHeaderError),
+    #[error("Error parsing header line: {0}")]
+    HeaderParseError(String),
 
-    #[error("Failed to read Bai index: {0}")]
-    BaiError(#[from] BaiError),
+    #[error("Error reading index file {path}")]
+    IndexReadError{
+        path: String,
+        #[source]
+        source: StoreError
+    },
 
-    #[error("Failed to initialise search: {0}")]
-    SearchError(#[from] crate::api::search::SearchError),
+    #[error("Error parsing bytes")]
+    ByteParsingError(#[from] TryFromSliceError),
+
+    #[error("Error parsing file")]
+    ParseError {
+        #[source]
+        source: ChunkError
+    }
 }

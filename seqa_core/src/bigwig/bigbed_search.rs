@@ -12,7 +12,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use crate::api::search_options::SearchOptions;
 use crate::api::search_result::SearchResult;
 use crate::bigwig::bigbed_data::BigbedData;
@@ -21,13 +20,12 @@ use crate::bigwig::index::bigwig_index::BigwigIndex;
 use crate::bigwig::index::chr_tree::BigwigChrTree;
 use crate::bigwig::index::r_tree::RTree;
 use crate::bigwig::index::r_tree::overlaps::Overlaps;
-use crate::bigwig::index::r_tree::r_tree_leaf::RTreeLeaf;
 use crate::bigwig::index::util::get_zoom_strings;
 use crate::bigwig::index::zoom_header::ZoomHeader;
 use crate::bigwig::zoom_data::ZoomData;
 use crate::codecs::decompress_auto;
 use crate::stores::StoreService;
-use std::ops::Range;
+use crate::bigwig::bigwig_search::get_range_from_leaves;
 
 pub fn get_data_strings(bytes: &[u8], chr_tree: &BigwigChrTree, options: &SearchOptions) -> Vec<String> {
     let mut str_array = Vec::new();
@@ -113,11 +111,9 @@ pub async fn bigbed_search(
         }
     };
 
-    let index_offset = get_index_begin(index, zoom_header).await?;
+    let index_offset = get_index_begin(index, zoom_header);
     let index_end = get_index_end(store_service, index, zoom_header).await?;
-
     let r_tree = RTree::from_file(store_service, &options.file_path, index_offset..index_end).await?;
-
     let leaves = r_tree.get_overlapping_leaves(chr_id, options.begin, options.end);
 
     if leaves.is_empty() {
@@ -125,9 +121,7 @@ pub async fn bigbed_search(
     }
 
     let range = get_range_from_leaves(&leaves);
-
     let data = index.get_data(store_service, &range, &options.file_path).await?;
-
     let mut decompressed_blocks: Vec<Vec<u8>> = Vec::new();
 
     for leaf in leaves {
@@ -153,13 +147,13 @@ pub async fn bigbed_search(
     Ok(result)
 }
 
-async fn get_index_begin(
+fn get_index_begin(
     index: &BigwigIndex,
     zoom_header: Option<&ZoomHeader>,
-) -> Result<u64, BigbedError> {
+) -> u64 {
     match zoom_header {
-        Some(zoom_header) => Ok(zoom_header.index_offset as u64),
-        None => Ok(index.header.full_index_offset as u64),
+        Some(zoom_header) => zoom_header.index_offset,
+        None => index.header.full_index_offset,
     }
 }
 
@@ -174,18 +168,4 @@ async fn get_index_end(
             .await?),
         None => Ok(index.get_full_index_end(store_service, &index.file_path).await?),
     }
-}
-
-pub fn get_range_from_leaves(leaves: &[&RTreeLeaf]) -> Range<u64> {
-    let begin = leaves
-        .iter()
-        .map(|l| l.data_offset)
-        .min()
-        .unwrap_or(u64::MAX);
-    let end = leaves
-        .iter()
-        .map(|l| l.data_offset + l.data_size)
-        .max()
-        .unwrap_or(u64::MAX);
-    begin..end
 }

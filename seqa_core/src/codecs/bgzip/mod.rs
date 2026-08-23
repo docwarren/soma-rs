@@ -21,11 +21,11 @@ use crate::codecs::codec_error::CodecError;
 
 /// Reads BGZIP blocks from a byte vector
 /// Returns a vector of block sizes.
-pub fn from_bytes(bytes: &Vec<u8>) -> Result<Vec<usize>, CodecError> {
+pub fn from_bytes(bytes: &[u8]) -> Result<Vec<usize>, CodecError> {
     let mut i = 0;
     let mut blocks = Vec::with_capacity(bytes.len() / (16 * 1024) + 1);
     while i < bytes.len() {
-        let block = BgZipBlock::from_bytes(&bytes, i);
+        let block = BgZipBlock::from_bytes(bytes, i);
         match block {
             Ok(block) => {
                 let size = block.sub_block.bsize as usize + 1;
@@ -56,7 +56,7 @@ pub fn decompress(block_sizes: &[usize], bytes: &[u8]) -> Result<Vec<u8>, CodecE
     for handle in zip_handles {
         match handle.join() {
             Ok(decompressed) => {
-                result.push(decompressed.map(|d|d)?)
+                result.push(decompressed?)
             },
             Err(_) => {
                 return Err(CodecError::UnknownError("Error joining decompression thread results".to_string()))

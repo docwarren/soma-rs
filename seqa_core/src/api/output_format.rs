@@ -63,11 +63,11 @@ impl OutputFormat {
     /// ```
     /// use seqa_core::api::output_format::OutputFormat;
     ///
-    /// assert_eq!(OutputFormat::from_str("bam").unwrap(), OutputFormat::BAM);
-    /// assert_eq!(OutputFormat::from_str("VCF").unwrap(), OutputFormat::VCF);
-    /// assert!(OutputFormat::from_str("unknown").is_err());
+    /// assert_eq!(OutputFormat::get_enum("bam").unwrap(), OutputFormat::BAM);
+    /// assert_eq!(OutputFormat::get_enum("VCF").unwrap(), OutputFormat::VCF);
+    /// assert!(OutputFormat::get_enum("unknown").is_err());
     /// ```
-    pub fn from_str(format: &str) -> Result<OutputFormat, String> {
+    pub fn get_enum(format: &str) -> Result<OutputFormat, String> {
         match format.to_lowercase().as_str() {
             "bam" => Ok(OutputFormat::BAM),
             "fasta" => Ok(OutputFormat::FASTA),

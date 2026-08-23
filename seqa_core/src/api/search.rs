@@ -12,20 +12,22 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use futures::{TryStreamExt, future::join_all};
-use log::error;
+use futures::TryStreamExt;
+use futures::future::try_join_all;
 use object_store::ObjectStore;
 
 use crate::api::output_format::OutputFormat;
-pub(crate) use crate::api::search_error::{SearchError, SearchFeaturesError};
+use crate::api::search_error::SearchError;
 use crate::api::search_options::SearchOptions;
 use crate::api::search_result::SearchResult;
 use crate::bam::bam_search::bam_search;
 use crate::bigwig::bigbed_search::bigbed_search;
 use crate::bigwig::bigwig_search::bigwig_search;
 use crate::codecs::bgzip;
+use crate::codecs::codec_error::CodecError;
 use crate::fasta::fasta_search::fasta_search;
 use crate::indexes::chunk::Chunk;
+use crate::stores::error::StoreError;
 use crate::stores::StoreService;
 use crate::tabix::tabix_search::tabix_search;
 
@@ -59,29 +61,24 @@ pub async fn init_fetch_handles(
     store_service: &StoreService,
     options: &SearchOptions,
     chunks: &[Chunk],
-) -> Result<Vec<(Chunk, Vec<u8>)>, SearchError> {
+) -> Result<Vec<(Chunk, Vec<u8>)>, StoreError> {
     let futures = chunks.iter().map(|chunk| {
         let range = chunk.to_range();
         let file_path = options.file_path.clone();
         let chunk_clone = chunk.clone();
         async move {
-            match store_service.get_range(&file_path, range).await {
-                Ok(data) => (chunk_clone, data),
-                Err(e) => {
-                    error!("Error fetching range for chunk {:?}: {}", chunk_clone, e);
-                    (chunk_clone, vec![])
-                }
-            }
+            let data = store_service.get_range(&file_path, range).await?;
+            Ok((chunk_clone, data))
         }
     });
 
-    Ok(join_all(futures).await)
+    try_join_all(futures).await
 }
 
 /// Decompresses each fetched chunk and returns the post-offset data.
 pub async fn join_fetch_handles(
     fetched: Vec<(Chunk, Vec<u8>)>,
-) -> Result<Vec<Vec<u8>>, SearchError> {
+) -> Result<Vec<Vec<u8>>, CodecError> {
     let mut raw_data = Vec::new();
 
     for (chunk, compressed_bytes) in fetched {
@@ -102,21 +99,19 @@ pub async fn join_fetch_handles(
 pub async fn search_features(
     store: &StoreService,
     options: &SearchOptions,
-) -> Result<SearchResult, SearchFeaturesError> {
+) -> Result<SearchResult, SearchError> {
     let result = match options.output_format {
-        OutputFormat::BAM => bam_search(store, options).await.map_err(SearchFeaturesError::from),
-        OutputFormat::BIGWIG => bigwig_search(store, options).await.map_err(SearchFeaturesError::from),
-        OutputFormat::BIGBED => bigbed_search(store, options).await.map_err(SearchFeaturesError::from),
+        OutputFormat::BAM => bam_search(store, options).await.map_err(|e| SearchError::Bam{ path: options.file_path.to_string(), source: e}),
+        OutputFormat::BIGWIG => bigwig_search(store, options).await.map_err(|e| SearchError::BigWig{ path: options.file_path.to_string(), source: e}),
+        OutputFormat::BIGBED => bigbed_search(store, options).await.map_err(|e| SearchError::BigBed{ path: options.file_path.to_string(), source: e}),
         OutputFormat::VCF
         | OutputFormat::BED
         | OutputFormat::BEDGRAPH
         | OutputFormat::GFF
-        | OutputFormat::GTF => tabix_search(store, options).await.map_err(SearchFeaturesError::from),
-        OutputFormat::FASTA => fasta_search(store, options).await.map_err(SearchFeaturesError::from),
-        _ => Err(SearchFeaturesError::String(
-            "Output format is not supported for file search".into(),
-        )),
+        | OutputFormat::GTF => tabix_search(store, options).await.map_err(|e| SearchError::Tabix{ path: options.file_path.to_string(), source: e}),
+        OutputFormat::FASTA => fasta_search(store, options).await.map_err(|e| SearchError::Fasta { path: options.file_path.to_string(), source: e }),
+        _ => Err(SearchError::UnsupportedFileFormat(options.file_path.to_string())),
     };
 
-    result.map_err(|e| SearchFeaturesError::String(format!("Error searching file: {}", e)))
+    result
 }

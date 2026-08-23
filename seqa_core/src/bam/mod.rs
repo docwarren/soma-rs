@@ -1,7 +1,6 @@
 pub mod bam_error;
 pub mod bam_search;
 pub mod bai;
-pub mod bai_error;
 pub mod read;
 pub mod cigar;
 pub mod qual;

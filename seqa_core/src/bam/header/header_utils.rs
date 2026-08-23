@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bam::header::header::BamHeaderError;
+use std::array::TryFromSliceError;
 
-pub async fn read_magic(bytes: &Vec<u8>) -> Result<(String, u32), BamHeaderError> {
+pub async fn read_magic(bytes: &Vec<u8>) -> Result<(String, u32), TryFromSliceError> {
     let magic = String::from_utf8_lossy(&bytes[0..4]).to_string();
     let l_text = u32::from_le_bytes(bytes[4..8].try_into()?);
 
