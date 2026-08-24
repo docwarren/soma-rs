@@ -12,12 +12,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
-
 const S3_BAM: &str = "s3://com.gmail.docarw/test_data/NA12877.bam";
 const S3_BAM_INDEX: &str = "s3://com.gmail.docarw/test_data/NA12877.bam.bai";
-
 fn cleanup_bam_index() {
     seqa_core::indexes::index_cache::delete_local_index(S3_BAM_INDEX);
 }
@@ -33,10 +29,10 @@ async fn bam_chr12() {
         .set_include_header(false);
 
     let store_service = StoreService::new();
-    let result = search_features(&store_service, &options).await.expect(&format!("Failed to search BAM for chr12: {}", options.chromosome));
+    let result = search_features(&store_service, &options).await.unwrap_or_else(|_| panic!("Failed to search BAM for {}", options.chromosome));
     assert_eq!(result.lines.len(), 51);
-    assert_eq!(format!("{}", result.lines[0]), "HSQ1008:141:D0CC8ACXX:4:2203:18142:64281	83	chr12	9999905	60	101M	=	9999602	-404	ATCAGAGACTAGGTTTGCAACCCCTGCTTTATTTTATTTTATTTTATTTACTTATTTATTTATTTTTGCTTTCCATTTGCTTGGGAAATATTTCTCCATCA	;:5>@>ACA@C?=A;;;<=48=EC=>@>DHF;HGHF<IIIIG>HEFDBB9FBHGHCHF@ECHFEFFBHEAE@BE@DBEFECAIIGGGE>BFC;BDDBD<@@	RG:Z:NA12877	XT:A:U	NM:i:0	SM:i:37	AM:i:37	X0:i:1	X1:i:0	XM:i:0	XO:i:0	XG:i:0	MD:Z:101");
-    assert_eq!(format!("{}", result.lines[50]), "HSQ1008:141:D0CC8ACXX:4:1102:6116:159280	99	chr12	9999998	52	101M	=	10000295	398	CTCCATCACTTTATTTTGAGTCTATGTGTGTCTTTGCACATTCAATGGGTCTCCTGAATACAGCACACCAATGGTTCTTGACTCTTTATCCAATTTGCCAG	@CCFFFFFHHHFFGHIIEIGGHHIJJJJIIGGHJJIEGIJIGJEIIJIGGHGIJJJFHJJJJJJGGIIIGHIII=>CHHHGHFFFD>?CCECCCEEDDDC@	RG:Z:NA12877	XT:A:U	NM:i:0	SM:i:37	AM:i:15	X0:i:1	X1:i:0	XM:i:0	XO:i:0	XG:i:0	MD:Z:101");
+    assert_eq!(result.lines[0].to_string(), "HSQ1008:141:D0CC8ACXX:4:2203:18142:64281	83	chr12	9999905	60	101M	=	9999602	-404	ATCAGAGACTAGGTTTGCAACCCCTGCTTTATTTTATTTTATTTTATTTACTTATTTATTTATTTTTGCTTTCCATTTGCTTGGGAAATATTTCTCCATCA	;:5>@>ACA@C?=A;;;<=48=EC=>@>DHF;HGHF<IIIIG>HEFDBB9FBHGHCHF@ECHFEFFBHEAE@BE@DBEFECAIIGGGE>BFC;BDDBD<@@	RG:Z:NA12877	XT:A:U	NM:i:0	SM:i:37	AM:i:37	X0:i:1	X1:i:0	XM:i:0	XO:i:0	XG:i:0	MD:Z:101");
+    assert_eq!(result.lines[50].to_string(), "HSQ1008:141:D0CC8ACXX:4:1102:6116:159280	99	chr12	9999998	52	101M	=	10000295	398	CTCCATCACTTTATTTTGAGTCTATGTGTGTCTTTGCACATTCAATGGGTCTCCTGAATACAGCACACCAATGGTTCTTGACTCTTTATCCAATTTGCCAG	@CCFFFFFHHHFFGHIIEIGGHHIJJJJIIGGHJJIEGIJIGJEIIJIGGHGIJJJFHJJJJJJGGIIIGHIII=>CHHHGHFFFD>?CCECCCEEDDDC@	RG:Z:NA12877	XT:A:U	NM:i:0	SM:i:37	AM:i:15	X0:i:1	X1:i:0	XM:i:0	XO:i:0	XG:i:0	MD:Z:101");
     cleanup_bam_index();
 }
 
