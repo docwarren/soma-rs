@@ -12,17 +12,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use clap::{Parser, Subcommand};
-use seqa_core::api::search_options::SearchOptions;
-use seqa_core::sqlite::{self, genes::{self, GeneError}};
-use seqa_core::stores::StoreService;
 use std::io::{self, Write};
-use thiserror::Error;
-use log::{debug, error};
+use log::error;
+use clap::{Parser, Subcommand};
+use anyhow::{bail, Result, Context};
+use seqa_core::api::search_options::SearchOptions;
+use seqa_core::sqlite::{self, genes::{self}};
+use seqa_core::stores::StoreService;
 use seqa_core::api::search::search_features;
 use seqa_core::api::search_error::SearchError;
-use seqa_core::util_error::ExtensionError;
+use seqa_core::sqlite::genes::GeneError;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -102,29 +101,12 @@ enum GeneCommands {
     },
 }
 
-#[derive(Error, Debug)]
-pub enum ApiError {
-    #[error("Search Error: {0}")]
-    SearchError(#[from] SearchError),
-
-    #[error("Extension Error: {0}")]
-    ExtensionError(#[from] ExtensionError),
-
-    #[error("Gene Error: {0}")]
-    GeneError(#[from] GeneError),
-}
-
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()>{
     env_logger::init();
 
-    let cli = match Cli::try_parse() {
-        Ok(cli) => cli,
-        Err(err) => {
-            err.print().expect("Error writing Error");
-            std::process::exit(1);
-        }
-    };
+    let cli = Cli::parse();
+
     match cli.command {
         Commands::Search {
             file,
@@ -169,29 +151,25 @@ async fn main() {
                 Ok(lines) => {
                     let result = print_output(&lines);
                     match result {
-                        Ok(_) => {}
+                        Ok(_) => {Ok(())}
                         Err(e) if e.kind() == io::ErrorKind::BrokenPipe => {
-                            // Handle broken pipe error gracefully
-                            std::process::exit(0);
+                            bail!("Broken pipe! {:?}", e);
                         }
-                        Err(e) => error!("Error writing output: {:?}", e),
+                        Err(e) => bail!("Error writing output: {:?}", e),
                     }
                 }
                 Err(e) => {
-                    debug!("{:?}", e);
+                    bail!("Search Error: {:?}", e);
                 }
             }
         }
         Commands::Genes { command } => {
-            if let Err(e) = run_gene_command(command) {
-                error!("{}", e);
-                std::process::exit(1);
-            }
+            run_gene_command(command).with_context(|| "Error fetching genes / cytobands")
         }
     }
 }
 
-fn run_gene_command(command: GeneCommands) -> Result<(), ApiError> {
+fn run_gene_command(command: GeneCommands) -> Result<(), GeneError> {
     match command {
         GeneCommands::Coordinates { gene, reference } => {
             let conn = sqlite::connect_genes(&reference)?;
@@ -225,7 +203,7 @@ fn run_gene_command(command: GeneCommands) -> Result<(), ApiError> {
 async fn search(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<Vec<String>, ApiError> {
+) -> Result<Vec<String>, SearchError> {
     let search_result = search_features(store_service, options).await?;
     Ok(search_result.lines)
 }
