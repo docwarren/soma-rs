@@ -12,12 +12,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+use core::array::TryFromSliceError;
+use thiserror::Error;
 use super::overlaps::Overlaps;
 use crate::bigwig::index::r_tree::r_tree_node::RTreeNode;
-use core::array::TryFromSliceError;
-use std::u32;
-use thiserror::Error;
+use crate::api::parsing_error::ParsingError;
 
 #[derive(Debug, Clone, Error)]
 pub enum RTreeNonLeafError {
@@ -54,9 +53,9 @@ impl RTreeNonLeaf {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, RTreeNonLeafError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParsingError> {
         if bytes.len() < RTreeNonLeaf::SIZE {
-            return Err(RTreeNonLeafError::ReadError("Not enough bytes for a complete RTree non-leaf".into()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let start_chrom_idx = u32::from_le_bytes(bytes[0..4].try_into()?);

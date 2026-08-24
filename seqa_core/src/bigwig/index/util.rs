@@ -1,5 +1,4 @@
 use crate::api::search_options::SearchOptions;
-use crate::bigwig::index::bigwig_index_error::BigwigIndexError;
 use crate::bigwig::index::chr_tree::BigwigChrTree;
 use crate::bigwig::index::header::BigwigHeader;
 use crate::bigwig::index::r_tree::overlaps::Overlaps;
@@ -9,6 +8,8 @@ use crate::bigwig::zoom_data::ZoomData;
 use crate::indexes::constants::{BIGWIG_HEADER_SIZE, BIGWIG_ZOOM_HEADER_SIZE};
 use crate::stores::StoreService;
 use std::ops::Range;
+use crate::api::parsing_error::ParsingError;
+use crate::api::search_error::SearchError;
 
 pub fn get_zoom_strings(bytes: Vec<u8>, chr_tree: &BigwigChrTree, options: &SearchOptions) -> Vec<String> {
     let mut str_array = Vec::new();
@@ -37,19 +38,29 @@ pub fn get_bigwig_header_range() -> Range<u64> {
     }
 }
 
-pub async fn get_bigwig_header(store: &StoreService, path_str: &str) -> Result<BigwigHeader, BigwigIndexError> {
+pub async fn get_bigwig_header(store: &StoreService, path_str: &str) -> Result<BigwigHeader, SearchError> {
     let header_range = get_bigwig_header_range();
-    let header_bytes = store.get_range(path_str, header_range).await?;
-
-    Ok(BigwigHeader::from_bytes(&header_bytes)?)
+    let header_bytes = store.get_range(path_str, header_range).await.map_err(|e| SearchError::ReadError {
+        path: path_str.to_string(),
+        source: e
+    })?;
+    BigwigHeader::from_bytes(&header_bytes).map_err(|e| SearchError::ParseError {
+        path: path_str.to_string(),
+        source: e
+    })
 }
 
-pub async fn get_bigwig_detail_bytes(store: &StoreService, header: &BigwigHeader, path_str: &str) -> Result<Vec<u8>, BigwigIndexError> {
+pub async fn get_bigwig_detail_bytes(store: &StoreService, header: &BigwigHeader, path_str: &str) -> Result<Vec<u8>, SearchError> {
     let index_range = 0u64..header.full_data_offset as u64 + 4;
-    Ok(store.get_range(path_str, index_range).await?)
+    Ok(store.get_range(path_str, index_range)
+        .await
+        .map_err(|e| SearchError::ReadError {
+            path: path_str.to_string(),
+            source: e
+        })?)
 }
 
-pub fn get_zoom_headers(header: &BigwigHeader, index_bytes: &[u8]) -> Result<Vec<ZoomHeader>, BigwigIndexError> {
+pub fn get_zoom_headers(header: &BigwigHeader, index_bytes: &[u8]) -> Result<Vec<ZoomHeader>, ParsingError> {
     if header.zoom_levels == 0 {
         return Ok(Vec::new());
     }
@@ -59,7 +70,7 @@ pub fn get_zoom_headers(header: &BigwigHeader, index_bytes: &[u8]) -> Result<Vec
 
     for _ in 0usize..header.zoom_levels as usize {
         if offset + BIGWIG_ZOOM_HEADER_SIZE as usize > index_bytes.len() {
-            return Err(BigwigIndexError::BigwigError("Not enough bytes for a complete ZoomHeader".to_string()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let zoom_header = ZoomHeader::from_bytes(&index_bytes[offset..offset + BIGWIG_ZOOM_HEADER_SIZE as usize])?;
@@ -72,16 +83,16 @@ pub fn get_zoom_headers(header: &BigwigHeader, index_bytes: &[u8]) -> Result<Vec
     Ok(zoom_headers)
 }
 
-pub fn get_total_summary(header: &BigwigHeader, index_bytes: &[u8]) -> Result<TotalSummary, BigwigIndexError> {
+pub fn get_total_summary(header: &BigwigHeader, index_bytes: &[u8]) -> Result<TotalSummary, ParsingError> {
     let start = header.total_summary_offset as usize;
     let end = header.chromosome_tree_offset as usize;
 
-    Ok(TotalSummary::from_bytes(&index_bytes[start..end])?)
+    TotalSummary::from_bytes(&index_bytes[start..end])
 }
 
-pub fn get_data_count(index_bytes: &[u8]) -> Result<u32, BigwigIndexError> {
+pub fn get_data_count(index_bytes: &[u8]) -> Result<u32, ParsingError> {
     if index_bytes.len() < 4 {
-        return Err(BigwigIndexError::BigwigError("Not enough bytes for data count".to_string()));
+        return Err(ParsingError::InsufficientBytes);
     }
     let range = Range {
         start: index_bytes.len() - 4,

@@ -1,4 +1,3 @@
-pub mod bigbed_error;
 pub mod bigbed_search;
 pub mod bigwig_search;
 pub mod index;

@@ -12,15 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-pub mod r_tree_header;
-pub mod r_tree_leaf;
-pub mod r_tree_node;
-pub mod r_tree_non_leaf;
-pub mod overlaps;
-pub mod r_tree_error;
-
-use crate::bigwig::index::r_tree::r_tree_error::RTreeError;
+use std::ops::Range;
 use crate::bigwig::index::r_tree::{
     r_tree_leaf::RTreeLeaf,
     r_tree_node::{RTreeNode, RTreeNodeType},
@@ -28,7 +20,13 @@ use crate::bigwig::index::r_tree::{
 use crate::stores::StoreService;
 use overlaps::Overlaps;
 use r_tree_header::RTreeHeader;
-use std::ops::Range;
+use crate::api::search_error::SearchError;
+
+pub mod r_tree_header;
+pub mod r_tree_leaf;
+pub mod r_tree_node;
+pub mod r_tree_non_leaf;
+pub mod overlaps;
 
 pub struct RTree {
     pub header: RTreeHeader,
@@ -51,12 +49,22 @@ impl RTree {
         store: &StoreService,
         file_path: &str,
         range: Range<u64>,
-    ) -> Result<RTree, RTreeError> {
+    ) -> Result<RTree, SearchError> {
         let tree_range = range.start..range.end;
-        let tree_bytes = store.get_range(&file_path, tree_range).await?;
-        let index_header = RTreeHeader::from_bytes(&tree_bytes)?;
+        let tree_bytes = store.get_range(&file_path, tree_range).await.map_err(|e| SearchError::ReadError {
+            path: file_path.to_string(),
+            source: e
+        })?;
+        let index_header = RTreeHeader::from_bytes(&tree_bytes).map_err(|e| SearchError::ParseError {
+            source: e,
+            path: file_path.to_string()
+        })?;
         let root_offset = range.start as usize + RTreeHeader::SIZE;
-        let root = RTreeNode::from_bytes(&tree_bytes[RTreeHeader::SIZE..], root_offset)?;
+        let root = RTreeNode::from_bytes(&tree_bytes[RTreeHeader::SIZE..], root_offset)
+            .map_err(|e| SearchError::ParseError {
+                path: file_path.to_string(),
+                source: e
+            })?;
 
         Ok(RTree {
             header: index_header,

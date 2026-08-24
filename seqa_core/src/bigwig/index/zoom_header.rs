@@ -15,6 +15,7 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use crate::api::parsing_error::ParsingError;
 
 #[derive(Debug, Error)]
 pub enum ZoomHeaderError {
@@ -43,9 +44,9 @@ impl ZoomHeader {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ZoomHeaderError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParsingError> {
         if bytes.len() < 24 {
-            return Err(ZoomHeaderError::HeaderError("Not enough bytes for a complete zoom header".to_string()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let reduction_level = u32::from_le_bytes(bytes[0..4].try_into()?);

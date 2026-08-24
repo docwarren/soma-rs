@@ -101,15 +101,15 @@ pub async fn search_features(
     options: &SearchOptions,
 ) -> Result<SearchResult, SearchError> {
     let result = match options.output_format {
-        OutputFormat::BAM => bam_search(store, options).await.map_err(|e| SearchError::Bam{ path: options.file_path.to_string(), source: e}),
-        OutputFormat::BIGWIG => bigwig_search(store, options).await.map_err(|e| SearchError::BigWig{ path: options.file_path.to_string(), source: e}),
-        OutputFormat::BIGBED => bigbed_search(store, options).await.map_err(|e| SearchError::BigBed{ path: options.file_path.to_string(), source: e}),
+        OutputFormat::BAM => bam_search(store, options).await,
+        OutputFormat::BIGWIG => bigwig_search(store, options).await,
+        OutputFormat::BIGBED => bigbed_search(store, options).await,
         OutputFormat::VCF
         | OutputFormat::BED
         | OutputFormat::BEDGRAPH
         | OutputFormat::GFF
-        | OutputFormat::GTF => tabix_search(store, options).await.map_err(|e| SearchError::Tabix{ path: options.file_path.to_string(), source: e}),
-        OutputFormat::FASTA => fasta_search(store, options).await.map_err(|e| SearchError::Fasta { path: options.file_path.to_string(), source: e }),
+        | OutputFormat::GTF => tabix_search(store, options).await,
+        OutputFormat::FASTA => fasta_search(store, options).await,
         _ => Err(SearchError::UnsupportedFileFormat(options.file_path.to_string())),
     };
 

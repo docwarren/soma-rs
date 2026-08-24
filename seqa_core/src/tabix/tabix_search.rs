@@ -17,6 +17,7 @@ use log::*;
 
 use crate::api::output_format::OutputFormat;
 use crate::api::search::{init_fetch_handles, join_fetch_handles};
+use crate::api::search_error::SearchError;
 use crate::api::search_options::SearchOptions;
 use crate::api::search_result::SearchResult;
 use crate::indexes::bin_util::get_bin_numbers;
@@ -26,7 +27,6 @@ use crate::tabix::bedgraph::BedGraphLine;
 use crate::tabix::gff::GffLine;
 use crate::tabix::gtf::GtfLine;
 use crate::tabix::tabix::Tabix;
-use crate::tabix::tabix_error::TabixError;
 use crate::tabix::tabix_header::TabixHeader;
 use crate::tabix::vcf::VcfLine;
 use crate::traits::sam_index::SamIndex;
@@ -76,7 +76,7 @@ pub fn data_to_lines(data: &Vec<u8>, options: &SearchOptions) -> Vec<String> {
 pub async fn tabix_search(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<SearchResult, TabixError> {
+) -> Result<SearchResult, SearchError> {
     let mut result = SearchResult::new();
 
     let tabix = match &options.tabix_index {
@@ -102,9 +102,9 @@ pub async fn tabix_search(
     let bin_numbers = get_bin_numbers(options.begin, options.end);
 
     let chr_i = tabix.get_chromosome_index_by_name(&options.chromosome)
-        .ok_or(TabixError::InvalidRequest {
+        .ok_or(SearchError::InvalidRequest {
             reason: format!("Chromosome not found in index: {}", options.chromosome),
-            request: format!("{}:{}-{}", options.chromosome, options.begin, options.end)
+            requested: format!("{}:{}-{}", options.chromosome, options.begin, options.end)
         })?;
 
     let chr_idx = &tabix.references[chr_i as usize];
@@ -112,15 +112,15 @@ pub async fn tabix_search(
 
     let chunk_handles = init_fetch_handles(store_service, &options, &chunks)
         .await
-        .map_err(|e| TabixError::ReadError {
-            description: "Error fetching data".to_string(),
+        .map_err(|e| SearchError::ReadError {
+            path: options.file_path.to_string(),
             source: e
         })?;
 
     let raw_data = join_fetch_handles(chunk_handles)
         .await
-        .map_err(|e| TabixError::CompressionError {
-            description: "Error decompressing data".to_string(),
+        .map_err(|e| SearchError::CodecError {
+            path: options.file_path.to_string(),
             source: e
         })?;
 
@@ -141,7 +141,7 @@ pub async fn tabix_search(
 pub async fn tabix_search_vcf(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<Vec<VcfLine>, TabixError> {
+) -> Result<Vec<VcfLine>, SearchError> {
     let tabix_result = tabix_search(store_service, options).await?;
     let mut vcf_lines = Vec::new();
 

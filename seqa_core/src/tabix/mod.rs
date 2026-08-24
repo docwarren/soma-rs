@@ -1,4 +1,3 @@
-pub mod tabix_error;
 pub mod tabix_search;
 pub mod tabix;
 pub mod tabix_header;

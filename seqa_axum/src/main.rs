@@ -13,8 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::Error;
 use std::sync::Arc;
-
+use std::fmt::{Display, Formatter};
+use anyhow::{Result, Context, bail};
 use axum::{
     Json, Router,
     extract::{Path, Request, State, rejection::JsonRejection},
@@ -27,13 +29,10 @@ use seqa_core::api::output_format::OutputFormat;
 use seqa_core::api::search_options::SearchOptions;
 use seqa_core::models::cytoband::Cytoband;
 use seqa_core::models::gene_coordinate::GeneCoordinate;
-use seqa_core::sqlite::{self, genes::{self, GeneError}};
+use seqa_core::sqlite::{self, genes::self};
 use seqa_core::stores::StoreService;
-use thiserror::Error;
 use tower_http::cors::CorsLayer;
 use seqa_core::api::search::search_features;
-use seqa_core::api::search_error::SearchError;
-use seqa_core::util_error::UtilError;
 use crate::cache::AppCache;
 use crate::search::models::SearchRequest;
 
@@ -60,63 +59,47 @@ pub struct ErrorResponse {
     pub code: u16,
 }
 
-#[derive(Debug, Error)]
-pub enum ApiError {
-    #[error("Internal server error")]
-    InternalServerError,
-
-    #[error("Not found: {0}")]
-    NotFound(String),
-
-    #[error("Bad request: {0}")]
-    BadRequest(String),
-
-    #[error("Database error: {0}")]
-    DatabaseError(String),
-
-    #[error("Search error: {0}")]
-    SearchError(#[from] SearchError),
-
-    #[error("SQLite error: {0}")]
-    SqliteError(#[from] rusqlite::Error),
-
-    #[error("Invalid search request: {0}")]
-    UtilError(#[from] UtilError),
-
-    #[error("Storage error: {0}")]
-    StoreError(String),
-
-    #[error("Gene lookup error: {0}")]
-    GeneError(#[from] GeneError),
-
-    #[error("Patient not found: {0}")]
-    PatientNotFound(String),
-
-    #[error("User not found: {0}")]
-    UserNotFound(String),
+#[derive(Debug)]
+pub struct ApiError {
+    status_code: StatusCode,
+    error: anyhow::Error
 }
 
 impl ApiError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            ApiError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
-            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            ApiError::DatabaseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::SearchError(_) => StatusCode::BAD_REQUEST,
-            ApiError::SqliteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::UtilError(_) => StatusCode::BAD_REQUEST,
-            ApiError::StoreError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::GeneError(_) => StatusCode::NOT_FOUND,
-            ApiError::PatientNotFound(_) => StatusCode::NOT_FOUND,
-            ApiError::UserNotFound(_) => StatusCode::NOT_FOUND,
+    fn new(status_code: StatusCode, error: anyhow::Error) -> Self {
+        ApiError {
+            status_code,
+            error
+        }
+    }
+
+    fn internal_server_error(e: anyhow::Error) -> Self {
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, e)
+    }
+
+    fn not_found(e: anyhow::Error) -> Self {
+        Self::new(StatusCode::NOT_FOUND, e)
+    }
+
+    fn bad_request(e: anyhow::Error) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, e)
+    }
+}
+
+impl Display for ApiError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.status_code {
+            StatusCode::INTERNAL_SERVER_ERROR => write!(f, "Internal Server Error"),
+            StatusCode::NOT_FOUND => write!(f, "Not Found"),
+            StatusCode::BAD_REQUEST => write!(f, "Bad Request"),
+            _ => write!(f, "Unexpected Error")
         }
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = self.status_code();
+        let status = self.status_code;
         let body = ErrorResponse {
             error: self.to_string(),
             code: status.as_u16(),
@@ -133,7 +116,10 @@ async fn feature_search(
     State(state): State<AppState>,
     payload: Result<Json<SearchRequest>, JsonRejection>,
 ) -> Result<String, ApiError> {
-    let Json(request) = payload.map_err(|e| ApiError::BadRequest(e.body_text()))?;
+    let Json(request) = payload
+        .map_err(|e| ApiError::bad_request(
+            anyhow::Error::msg(format!("Invalid JSON: {:?}", e))
+        ))?;
 
     if !request.path.ends_with(".bam")
         && !request.path.ends_with(".vcf.gz")
@@ -147,15 +133,17 @@ async fn feature_search(
         && !request.path.ends_with(".bigbed")
         && !request.path.ends_with(".bw")
     {
-        return Err(ApiError::BadRequest("Unsupported file type".into()));
+        bail!("Unsupported file type");
     }
     if request.coordinates.is_empty() {
-        return Err(ApiError::BadRequest("Missing coordinates".into()));
+        bail!("Missing coordinates");
     }
 
     let mut search_options = SearchOptions::new(&request.path, &request.coordinates);
     populate_from_cache(&state.cache, &mut search_options).await;
-    let result = search_features(&state.store, &search_options).await?;
+    let result = search_features(&state.store, &search_options)
+        .await
+        .map_err(|e| ApiError::internal_server_error(anyhow!()))?
     write_back_to_cache(&state.cache, &search_options, &result).await;
 
     Ok(result.lines.into_iter().collect::<Vec<String>>().join("\n"))
@@ -228,7 +216,7 @@ async fn list_dir(
     Ok(Json(entries))
 }
 
-async fn get_gene_symbols(Path(genome): Path<String>) -> Result<Json<Vec<String>>, ApiError> {
+async fn get_gene_symbols(Path(genome): Path<String>) -> Result<Json<Vec<String>>> {
     let connection = sqlite::connect_genes(&genome)?;
     let symbols = genes::get_gene_symbols(&connection)?;
     Ok(Json(symbols))
@@ -236,7 +224,7 @@ async fn get_gene_symbols(Path(genome): Path<String>) -> Result<Json<Vec<String>
 
 async fn get_coordinates(
     Path((genome, gene)): Path<(String, String)>,
-) -> Result<Json<GeneCoordinate>, ApiError> {
+) -> Result<Json<GeneCoordinate>> {
     let connection = sqlite::connect_genes(&genome)?;
     let coord = genes::get_gene_coordinates(&connection, &gene)?;
     Ok(Json(coord))
@@ -244,7 +232,7 @@ async fn get_coordinates(
 
 async fn get_cytobands(
     Path((genome, chromosome)): Path<(String, String)>,
-) -> Result<Json<Vec<Cytoband>>, ApiError> {
+) -> Result<Json<Vec<Cytoband>>> {
     let connection = sqlite::connect_cytobands(&genome)?;
     let cytobands = genes::get_cytobands(&connection, &chromosome)?;
     Ok(Json(cytobands))

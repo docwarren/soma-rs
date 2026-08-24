@@ -13,53 +13,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use std::ops::Range;
-use thiserror::Error;
-
+use crate::api::search_error::SearchError;
 use crate::api::search_options::SearchOptions;
 use crate::api::search_result::SearchResult;
 use crate::bigwig::bigwig_data::BigwigData;
 use crate::bigwig::index::bigwig_index::BigwigIndex;
-use crate::bigwig::index::bigwig_index_error::BigwigIndexError;
 use crate::bigwig::index::chr_tree::BigwigChrTree;
 use crate::bigwig::index::r_tree::RTree;
 use crate::bigwig::index::r_tree::overlaps::Overlaps;
-use crate::bigwig::index::r_tree::r_tree_error::RTreeError;
 use crate::bigwig::index::r_tree::r_tree_leaf::RTreeLeaf;
 use crate::bigwig::index::util::get_zoom_strings;
 use crate::bigwig::index::zoom_header::ZoomHeader;
 use crate::bigwig::zoom_data::ZoomData;
-use crate::codecs::codec_error::CodecError;
 use crate::codecs::decompress_auto;
 use crate::stores::StoreService;
-
-#[derive(Debug, Error)]
-pub enum BigwigError {
-    #[error("Bad Request: {0}")]
-    BadRequest(String),
-
-    #[error("Data processing error: {reason}")]
-    DataProcessingError {
-        reason: String,
-        #[source]
-        source: CodecError
-    },
-
-    #[error("Error with BigWig Index: {reason}")]
-    IndexError {
-        reason: String,
-        #[source]
-        source: BigwigIndexError
-    },
-
-    #[error("RTree Error")]
-    TreeError {
-        reason: String,
-        #[source]
-        source: RTreeError
-    },
-}
-
-
 
 pub fn get_data_strings(bytes: &[u8], chr_tree: &BigwigChrTree, options: &SearchOptions) -> Vec<String> {
     let mut str_array = Vec::new();
@@ -89,7 +56,7 @@ pub fn get_data_strings(bytes: &[u8], chr_tree: &BigwigChrTree, options: &Search
 ///  whether to include headers, and the range of positions to consider.
 /// # Returns:
 /// * A vector of strings containing the processed lines, which may include headers.
-pub fn data_to_lines(bytes: Vec<Vec<u8>>, is_zoom: bool, chr_tree: &BigwigChrTree, options: &SearchOptions) -> Result<Vec<String>, BigwigError> {
+pub fn data_to_lines(bytes: Vec<Vec<u8>>, is_zoom: bool, chr_tree: &BigwigChrTree, options: &SearchOptions) -> Vec<String> {
 
     let mut str_array: Vec<String> = if options.include_header {
         if is_zoom {
@@ -109,7 +76,7 @@ pub fn data_to_lines(bytes: Vec<Vec<u8>>, is_zoom: bool, chr_tree: &BigwigChrTre
         };
         str_array.extend(strings);
     }
-    Ok(str_array)
+    str_array
 }
 
 /// Searches for data in a bigwig file based on the provided search options.
@@ -122,19 +89,14 @@ pub fn data_to_lines(bytes: Vec<Vec<u8>>, is_zoom: bool, chr_tree: &BigwigChrTre
 pub async fn bigwig_search(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<SearchResult, BigwigError> {
+) -> Result<SearchResult, SearchError> {
     let mut result = SearchResult::new();
 
     let index = match &options.bigwig_index {
         Some(index) => {
             index
         },
-        _ => &BigwigIndex::new(store_service, &options.file_path)
-            .await
-            .map_err(|e| BigwigError::IndexError {
-                reason: "Unable to load index".to_string(),
-                source: e
-            })?
+        _ => &BigwigIndex::new(store_service, &options.file_path).await?
     };
     result.bigwig_index = Some(index.clone());
 
@@ -144,20 +106,16 @@ pub async fn bigwig_search(
     let chr_id = match index.chromosome_tree.get_chromosome_id(&options.chromosome) {
         Some(id) => id,
         _ => {
-            return Err(BigwigError::BadRequest(format!("Chromosome not found: {}", options.chromosome)));
+            return Err(SearchError::InvalidRequest {
+                reason: "Chromosome not found".to_string(),
+                requested: options.chromosome.to_string()
+            });
         }
     };
 
-    let index_offset = get_index_begin(index, zoom_header).await?;
+    let index_offset = get_index_begin(index, zoom_header);
     let index_end = get_index_end(store_service, index, zoom_header).await?;
-
-    let r_tree = RTree::from_file(store_service, &options.file_path, index_offset..index_end)
-        .await
-        .map_err(|e| BigwigError::TreeError {
-            reason: "Unable to load R Tree".to_string(),
-            source: e
-        })?;
-
+    let r_tree = RTree::from_file(store_service, &options.file_path, index_offset..index_end).await?;
     let leaves = r_tree.get_overlapping_leaves(chr_id, options.begin, options.end);
 
     if leaves.is_empty() {
@@ -165,14 +123,7 @@ pub async fn bigwig_search(
     }
 
     let range = get_range_from_leaves(&leaves);
-
-    let data = index.get_data(store_service, &range, &options.file_path)
-        .await
-        .map_err(|e| BigwigError::IndexError {
-            reason: "Error fetching data from index".to_string(),
-            source: e
-        })?;
-
+    let data = index.get_data(store_service, &range, &options.file_path).await?;
     let mut decompressed_blocks: Vec<Vec<u8>> = Vec::new();
 
     for leaf in leaves {
@@ -182,8 +133,8 @@ pub async fn bigwig_search(
 
         if is_compressed {
             let decompressed_block = decompress_auto(&compressed)
-                .map_err(|e| BigwigError::DataProcessingError {
-                    reason: "Could not decompress data".to_string(),
+                .map_err(|e| SearchError::CodecError {
+                    path: options.file_path.to_string(),
                     source: e
                 })?;
             decompressed_blocks.push(decompressed_block);
@@ -192,19 +143,14 @@ pub async fn bigwig_search(
         };
     }
     let is_zoom = zoom_header.is_some();
-
-    result.lines = match data_to_lines(decompressed_blocks, is_zoom, &index.chromosome_tree, options) {
-        Ok(lines) => lines,
-        Err(e) => return Err(e)
-    };
-
+    result.lines = data_to_lines(decompressed_blocks, is_zoom, &index.chromosome_tree, options);
     Ok(result)
 }
 
-async fn get_index_begin(index: &BigwigIndex, zoom_header: Option<&ZoomHeader>) -> Result<u64, BigwigError> {
+fn get_index_begin(index: &BigwigIndex, zoom_header: Option<&ZoomHeader>) -> u64 {
     match zoom_header {
-        Some(zoom_header) => Ok(zoom_header.index_offset),
-        None => Ok(index.header.full_index_offset),
+        Some(zoom_header) => zoom_header.index_offset,
+        None => index.header.full_index_offset,
     }
 }
 
@@ -212,21 +158,10 @@ async fn get_index_end(
     store_service: &StoreService,
     index: &BigwigIndex,
     zoom_header: Option<&ZoomHeader>,
-) -> Result<u64, BigwigError> {
+) -> Result<u64, SearchError> {
     match zoom_header {
-        Some(zoom_header) => Ok(index.get_end_for_zoom_header(store_service, zoom_header, &index.file_path)
-            .await
-            .map_err(|e| BigwigError::IndexError {
-                reason: "Error reading Zoom header".to_string(),
-                source: e
-            })?),
-        None => Ok(index.get_full_index_end(store_service, &index.file_path)
-            .await
-            .map_err(|e| BigwigError::IndexError {
-                reason: "Error getting full index".to_string(),
-                source: e
-            })?
-        ),
+        Some(zoom_header) => index.get_end_for_zoom_header(store_service, zoom_header, &index.file_path).await,
+        None => index.get_full_index_end(store_service, &index.file_path).await,
     }
 }
 

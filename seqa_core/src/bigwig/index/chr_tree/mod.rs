@@ -16,16 +16,15 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::bigwig::index::chr_tree::chr_tree_error::ChrTreeError;
 use crate::bigwig::index::chr_tree::chr_tree_node::{ChrTreeChild, ChrTreeNode};
 use crate::bigwig::index::header::BigwigHeader;
 use chr_tree_header::ChrTreeHeader;
+use crate::api::parsing_error::ParsingError;
 
 pub mod chr_tree_header;
 pub mod chr_tree_node;
 pub mod chr_tree_leaf;
 pub mod chr_tree_non_leaf;
-pub mod chr_tree_error;
 
 pub fn read_tree(root: &ChrTreeNode) -> (HashMap<String, u32>, HashMap<u32, String>) {
     let mut key_map = HashMap::new();
@@ -64,8 +63,8 @@ impl BigwigChrTree {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], header: &BigwigHeader) -> Result<Self, ChrTreeError> {
-        let chr_tree_range = header.chromosome_tree_offset as usize..header.chromosome_tree_offset as usize + ChrTreeHeader::SIZE as usize;
+    pub fn from_bytes(bytes: &[u8], header: &BigwigHeader) -> Result<Self, ParsingError> {
+        let chr_tree_range = header.chromosome_tree_offset as usize..header.chromosome_tree_offset as usize + ChrTreeHeader::SIZE;
         let chr_tree_header = ChrTreeHeader::from_bytes(&bytes[chr_tree_range.clone()])?;
         let (root, _) = ChrTreeNode::from_bytes(bytes, chr_tree_range.end, chr_tree_header.key_size)?;
         let (key_map, name_map) = read_tree(&root);

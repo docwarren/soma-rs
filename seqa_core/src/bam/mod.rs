@@ -1,4 +1,3 @@
-pub mod bam_error;
 pub mod bam_search;
 pub mod bai;
 pub mod read;

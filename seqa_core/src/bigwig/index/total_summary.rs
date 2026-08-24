@@ -14,17 +14,7 @@
 // limitations under the License.
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
-use core::array::TryFromSliceError;
-
-#[derive(Debug, Error)]
-pub enum TotalSummaryError {
-    #[error("Failed to parse TotalSummary: {0}")]
-    ParseError(#[from] TryFromSliceError),
-
-    #[error("Invalid TotalSummary data: {0}")]
-    InvalidData(String),
-}
+use crate::api::parsing_error::ParsingError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TotalSummary {
@@ -46,12 +36,13 @@ impl TotalSummary {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, TotalSummaryError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParsingError> {
         if bytes.len() < 40 {
-            return Err(TotalSummaryError::InvalidData("Not enough bytes for a complete total summary".to_string()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let bases_covered = u64::from_le_bytes(bytes[0..8].try_into()?);
+
         let min_val = f64::from_le_bytes(bytes[8..16].try_into()?);
         let max_val = f64::from_le_bytes(bytes[16..24].try_into()?);
         let sum_data = f64::from_le_bytes(bytes[24..32].try_into()?);

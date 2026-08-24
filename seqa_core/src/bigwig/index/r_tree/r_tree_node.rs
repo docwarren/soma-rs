@@ -1,3 +1,4 @@
+use crate::api::parsing_error::ParsingError;
 // Copyright 2026 Seqa23
 //
 // Author: Andrew Warren
@@ -12,7 +13,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::bigwig::index::r_tree::r_tree_error::RTreeNodeError;
 use crate::bigwig::index::r_tree::r_tree_leaf::RTreeLeaf;
 use crate::bigwig::index::r_tree::r_tree_non_leaf::RTreeNonLeaf;
 
@@ -42,10 +42,10 @@ impl RTreeNode {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], root_offset: usize) -> Result<Self, RTreeNodeError> {
+    pub fn from_bytes(bytes: &[u8], root_offset: usize) -> Result<Self, ParsingError> {
         let is_leaf = bytes[0] != 0;
         let reserved = bytes[1];
-        let count = u16::from_le_bytes(bytes[2..4].try_into().map_err(|_| RTreeNodeError::RTreeNodeReadError("Invalid R Tree Node".into()))?);
+        let count = u16::from_le_bytes(bytes[2..4].try_into()?);
 
         assert_eq!(reserved, 0, "Reserved byte should be zero, found: {}", reserved);
 

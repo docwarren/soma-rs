@@ -1,4 +1,4 @@
-use crate::bigwig::index::chr_tree::chr_tree_error::ChrTreeLeafError;
+use crate::api::parsing_error::ParsingError;
 
 // Copyright 2026 Seqa23
 //
@@ -31,9 +31,9 @@ impl ChrTreeLeaf {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], offset: usize, key_size: u32) -> Result<(Self, usize), ChrTreeLeafError> {
+    pub fn from_bytes(bytes: &[u8], offset: usize, key_size: u32) -> Result<(Self, usize), ParsingError> {
         if bytes.len() < 8 + key_size as usize {
-            return Err(ChrTreeLeafError::InvalidData("Not enough bytes for a complete leaf".into()));
+            return Err(ParsingError::InsufficientBytes);
         }
         let key = bytes[offset..offset + key_size as usize].iter().filter(|&&b| b != 0).cloned().collect::<Vec<u8>>();
         let key = String::from_utf8_lossy(&key).to_string();

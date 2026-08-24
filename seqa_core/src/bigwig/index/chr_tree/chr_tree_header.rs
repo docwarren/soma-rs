@@ -12,9 +12,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use crate::bigwig::index::chr_tree::chr_tree_error::ChrTreeHeaderError;
 use serde::{Deserialize, Serialize};
+use crate::api::parsing_error::ParsingError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChrTreeHeader {
@@ -40,10 +39,10 @@ impl ChrTreeHeader {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ChrTreeHeaderError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParsingError> {
 
         if bytes.len() < ChrTreeHeader::SIZE {
-            return Err(ChrTreeHeaderError::InvalidData("Not enough bytes for a complete chromosome tree header".into()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let magic = String::from_utf8_lossy(&bytes[0..4]).to_string();

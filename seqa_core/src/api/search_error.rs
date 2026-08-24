@@ -1,59 +1,63 @@
-use crate::bam::bam_error::BamError;
-use crate::bigwig::bigbed_error::BigbedError;
-use crate::bigwig::bigwig_search::BigwigError;
-use crate::fasta::fasta_error::FastaError;
-use crate::tabix::tabix_error::TabixError;
-use crate::utils::UtilError;
-
 use thiserror::Error;
+use crate::api::parsing_error::ParsingError;
+use crate::codecs::codec_error::CodecError;
+use crate::stores::error::StoreError;
 
 /// Unified error returned by [`StoreService::search_features`].
-///
 /// Wraps the format-specific error from the underlying search function.
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum SearchError {
     #[error("Unsupported file format: {0}")]
     UnsupportedFileFormat(String),
 
-    #[error("BAM error")]
-    Bam {
+    #[error("Invalid options format: {0}")]
+    InvalidOptions(String),
+
+    #[error("Invalid Coordinate string format")]
+    InvalidCoordinateFormat(String),
+
+    #[error("Error determining index path: {0}")]
+    IndexPathError(String),
+
+    #[error("Error determining file type: {0}")]
+    PathTypeError(String),
+
+    #[error("Error converting to absolute path: {path}")]
+    AbsolutePathError {
         path: String,
         #[source]
-        source: BamError
+        source: std::io::Error
     },
 
-    #[error("Fasta error")]
-    Fasta {
+    #[error("Invalid range request ({requested}) => {reason}")]
+    InvalidRequest {
+        requested: String,
+        reason: String
+    },
+
+    #[error("Error reading {path}")]
+    ReadError {
         path: String,
         #[source]
-        source: FastaError
+        source: StoreError
     },
 
-    #[error("Tabix error")]
-    Tabix {
+    #[error("Error parsing file {path}")]
+    ParseError{
+        path: String,
+        source: ParsingError
+    },
+
+    #[error("Error decompressing {path}")]
+    CodecError {
         path: String,
         #[source]
-        source: TabixError
+        source: CodecError
     },
 
-    #[error("BigWig error")]
-    BigWig {
-        path: String,
-        #[source]
-        source: BigwigError
-    },
-
-    #[error("BigBed error occurred")]
-    BigBed {
-        path: String,
-        #[source]
-        source: BigbedError
-    },
-
-    #[error("{description}")]
-    Util{
-        description: String,
-        #[source]
-        source: UtilError
+    #[error("File not found {path}")]
+    NotFound {
+        path: String
     },
 }

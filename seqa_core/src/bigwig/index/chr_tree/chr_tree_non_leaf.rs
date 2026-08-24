@@ -12,20 +12,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use core::array::TryFromSliceError;
-use thiserror::Error;
-
+use crate::api::parsing_error::ParsingError;
 use crate::bigwig::index::chr_tree::chr_tree_node::ChrTreeNode;
-
-#[derive(Debug, Error, Clone)]
-pub enum ChrTreeNonLeafError {
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
-
-    #[error("Parsing error: {0}")]
-    ParsingError(#[from] TryFromSliceError),
-}
 
 #[derive(Debug)]
 pub struct ChrTreeNonLeaf {
@@ -48,10 +36,10 @@ impl ChrTreeNonLeaf {
         start_offset: usize,
         key_size: u32,
 
-    ) -> Result<(Self, usize), ChrTreeNonLeafError> {
+    ) -> Result<(Self, usize), ParsingError> {
 
         if bytes.len() < 8 + key_size as usize {
-            return Err(ChrTreeNonLeafError::InvalidData("Not enough bytes for a complete non-leaf node".into()));
+            return Err(ParsingError::InsufficientBytes);
         }
         let offset = start_offset;
 
@@ -64,8 +52,7 @@ impl ChrTreeNonLeaf {
         let key = String::from_utf8_lossy(&key_bytes).to_string();
         let range = offset + key_size as usize..offset + key_size as usize + 8;
         let child_offset = u64::from_le_bytes(bytes[range].try_into()?);
-
-        let (child, _) = ChrTreeNode::from_bytes(bytes, child_offset as usize, key_size).map_err(|e| ChrTreeNonLeafError::InvalidData(format!("Chromosome Node Error: {}", e)))?;
+        let (child, _) = ChrTreeNode::from_bytes(bytes, child_offset as usize, key_size)?;
 
         Ok((
             ChrTreeNonLeaf {

@@ -13,17 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::api::search::{init_fetch_handles, join_fetch_handles};
+use crate::api::search_error::SearchError;
 use crate::api::search_options::{CigarFormat, SearchOptions};
 use crate::api::search_result::SearchResult;
 use crate::bam::bai::BaiIndex;
-use crate::bam::bam_error::BamError;
 use crate::bam::header::header::BamHeader;
 use crate::bam::read::Read;
 use crate::indexes::bin_util::get_bin_numbers;
 use crate::stores::StoreService;
 use crate::traits::feature::Feature;
 use crate::traits::sam_index::SamIndex;
-
 
 /// Converts raw data bytes into a vector of strings, processing each line according to the search options.
 /// # Arguments:
@@ -36,7 +35,7 @@ pub fn data_to_lines(
     data: &Vec<u8>,
     options: &SearchOptions,
     bam_header: &BamHeader,
-) -> Result<(bool, Vec<String>), BamError> {
+) -> Result<(bool, Vec<String>), SearchError> {
     let mut lines = Vec::new();
     let mut i = 0;
     let mut end = false;
@@ -68,11 +67,11 @@ pub fn data_to_lines(
 pub async fn bam_search(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<SearchResult, BamError> {
+) -> Result<SearchResult, SearchError> {
     let mut result = SearchResult::new();
 
     if options.end - options.begin > 200_000 {
-        return Err(BamError::InvalidRequest {
+        return Err(SearchError::InvalidRequest {
             requested: format!("{}:{}-{}", options.chromosome, options.begin, options.end),
             reason: "Bam query size limited to 200k bases".to_string()
         });
@@ -108,18 +107,26 @@ pub async fn bam_search(
 
     let chr_i = bam_header
         .get_chromosome_index_by_name(&options.chromosome)
-        .ok_or_else(|| BamError::ChromosomeNotFound(options.chromosome.clone()))?;
+        .ok_or_else(|| SearchError::InvalidRequest {
+            requested: options.chromosome.to_string(),
+            reason: "Chromosome not found in index".to_string()
+        })?;
 
     let chr_idx = &bai.references[chr_i as usize];
     let chunks = bai.get_optimized_chunks(&chr_idx, bin_numbers, &options);
 
     let chunk_handles = init_fetch_handles(store_service, &options, &chunks)
         .await
-        .map_err(|e| BamError::FetchError { source: e })?;
-
+        .map_err(|e| SearchError::ReadError {
+            path: options.file_path.to_string(),
+            source: e
+        })?;
     let raw_data = join_fetch_handles(chunk_handles)
         .await
-        .map_err(|e| BamError::DecompressionError { source: e })?;
+        .map_err(|e| SearchError::CodecError {
+            path: options.file_path.to_string(),
+            source: e
+        })?;
 
     result.lines = {
         match data_to_lines(&raw_data.concat(), options, bam_header) {

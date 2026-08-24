@@ -15,12 +15,11 @@
 
 use std::ops::Range;
 use serde::{ Serialize, Deserialize};
-
+use crate::api::search_error::SearchError;
 use crate::codecs::bgzip;
 use crate::indexes::constants::MAX_BLOCK_SIZE;
 use crate::indexes::virtual_offset::VirtualOffset;
 use crate::stores::StoreService;
-use crate::tabix::tabix_error::TabixError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TabixHeader {
@@ -42,29 +41,30 @@ impl TabixHeader {
         store: &StoreService,
         file_path: &str,
         first_vp: VirtualOffset,
-    ) -> Result<Self, TabixError> {
+    ) -> Result<Self, SearchError> {
         let compressed_bytes = store
             .get_range(file_path, Range {
                 start: 0u64,
                 end: first_vp.block_offset + MAX_BLOCK_SIZE,
             })
             .await
-            .map_err(|e| TabixError::ReadError {
+            .map_err(|e| SearchError::ReadError {
                 source: e,
-                description: "Unable to fetch header".to_string()
+                path: file_path.to_string()
             })?;
 
         let block_sizes = bgzip::from_bytes(&compressed_bytes)
-            .map_err(|e| TabixError::CompressionError {
-                description: "Error reading bgzip block for header".to_string(),
+            .map_err(|e| SearchError::CodecError {
+                path: file_path.to_string(),
                 source: e
             })?;
 
         let bytes = bgzip::decompress(&block_sizes, &compressed_bytes)
-            .map_err(|e| TabixError::CompressionError {
-                description: "Error decompressing header".to_string(),
+            .map_err(|e| SearchError::CodecError {
+                path: file_path.to_string(),
                 source: e
             })?;
+
         let header_str = String::from_utf8_lossy(&bytes);
 
         let lines = header_str.lines()

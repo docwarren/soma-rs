@@ -19,7 +19,8 @@ use crate::indexes::virtual_offset::VirtualOffset;
 use crate::stores::StoreService;
 use crate::traits::sam_index::SamIndex;
 use serde::{Deserialize, Serialize};
-use crate::bam::bam_error::BamError;
+use crate::api::parsing_error::ParsingError;
+use crate::api::search_error::SearchError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaiIndex {
@@ -54,16 +55,19 @@ impl BaiIndex {
         store_service: &StoreService,
         idx_path: &str,
         no_cache: bool,
-    ) -> Result<Self, BamError> {
+    ) -> Result<Self, SearchError> {
         let bytes = crate::indexes::index_cache::get_or_download_index(
             store_service,
             idx_path,
             no_cache
-        ).await.map_err(|e| BamError::IndexReadError { path: idx_path.to_string(), source: e })?;
-        BaiIndex::from_bytes(bytes)
+        ).await.map_err(|e| SearchError::ReadError { path: idx_path.to_string(), source: e })?;
+        BaiIndex::from_bytes(bytes).map_err(|e| SearchError::ParseError {
+            path: idx_path.to_string(),
+            source: e
+        })
     }
 
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, BamError> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, ParsingError> {
         let mut i = 0;
         let mut bai_index = BaiIndex::new();
 
@@ -94,7 +98,9 @@ impl BaiIndex {
                 // Read chunks for this bin
                 for _ in 0..n_chunk {
                     let chunk = Chunk::from_bytes(&bytes[i..i + 16], bin_number)
-                        .map_err(|e| BamError::ParseError { source: e })?;
+                        .map_err(|e| ParsingError::ChunkError {
+                            source: e
+                        })?;
                     i += 16;
                     chunks.push(chunk);
 

@@ -5,6 +5,5 @@ pub mod header;
 pub mod total_summary;
 pub mod wig_section_header;
 pub mod zoom_header;
-pub mod bigwig_index_error;
 pub mod bigwig_index;
 pub mod util;

@@ -16,10 +16,10 @@
 use std::collections::HashMap;
 use std::ops::Range;
 use serde::{Deserialize, Serialize};
-
+use crate::api::parsing_error::ParsingError;
+use crate::api::search_error::SearchError;
 use crate::stores::StoreService;
 use crate::api::search_options::SearchOptions;
-use crate::fasta::fasta_error::FaiIndexError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Contig {
@@ -46,23 +46,23 @@ impl FaiIndex {
     pub async fn from_file(
         store_service: &StoreService,
         idx_path: &str,
-    ) -> Result<Self, FaiIndexError> {
+    ) -> Result<Self, SearchError> {
         let bytes = store_service.get_object(idx_path)
             .await
-            .map_err(|e| FaiIndexError::ReadError {
-                file_path: idx_path.to_string(),
+            .map_err(|e| SearchError::ReadError {
+                path: idx_path.to_string(),
                 source: e
             })?;
 
-        Ok(FaiIndex::from_bytes(bytes)?)
+        FaiIndex::from_bytes(bytes).map_err(|e| SearchError::ParseError {
+            path: idx_path.to_string(),
+            source: e
+        })
     }
 
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, FaiIndexError> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, ParsingError> {
         let mut fai_index = FaiIndex::new();
-        let lines = String::from_utf8(bytes)
-            .map_err(|e| FaiIndexError::ParseError {
-                source: e
-            })?;
+        let lines = String::from_utf8(bytes)?;
 
         for line in lines.lines() {
             if line.is_empty() || line.starts_with('#') {
@@ -89,17 +89,17 @@ impl FaiIndex {
         Ok(fai_index)
     }
 
-    pub fn get_offsets(&self, options: &SearchOptions) -> Result<Range<u64>, FaiIndexError> {
+    pub fn get_offsets(&self, options: &SearchOptions) -> Result<Range<u64>, SearchError> {
         let contig = crate::genome::chromosome_aliases(&options.chromosome)
             .iter()
             .find_map(|alias| self.contigs.get(alias))
-            .ok_or(FaiIndexError::InvalidRequest {
+            .ok_or(SearchError::InvalidRequest {
                 reason: "Contig not found".to_string(),
                 requested: options.chromosome.to_string()
             })?;
 
         if options.begin < 1 || options.end > contig.length as u32 {
-            return Err(FaiIndexError::InvalidRequest {
+            return Err(SearchError::InvalidRequest {
                 reason: "Invalid Coordinates".to_string(),
                 requested: format!("{}:{}-{}", options.chromosome, options.begin, options.end)
             });

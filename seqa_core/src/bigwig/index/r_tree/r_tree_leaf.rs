@@ -1,3 +1,4 @@
+use crate::api::parsing_error::ParsingError;
 // Copyright 2026 Seqa23
 //
 // Author: Andrew Warren
@@ -13,7 +14,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::overlaps::Overlaps;
-use crate::bigwig::index::r_tree::r_tree_error::RTreeLeafError;
 
 #[derive(Debug, Clone)]
 pub struct RTreeLeaf {
@@ -40,9 +40,9 @@ impl RTreeLeaf {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, RTreeLeafError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParsingError> {
         if bytes.len() < RTreeLeaf::SIZE {
-            return Err(RTreeLeafError::RTreeLeafReadError("Not enough bytes for a complete RTree leaf".into()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let start_chrom_idx = u32::from_le_bytes(bytes[0..4].try_into()?);

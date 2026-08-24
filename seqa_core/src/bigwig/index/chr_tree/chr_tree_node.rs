@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bigwig::index::chr_tree::chr_tree_error::ChrTreeNodeError;
+use crate::api::parsing_error::ParsingError;
 use crate::bigwig::index::chr_tree::chr_tree_leaf::ChrTreeLeaf;
 use crate::bigwig::index::chr_tree::chr_tree_non_leaf::ChrTreeNonLeaf;
 
@@ -29,9 +29,9 @@ fn read_leaf_nodes(
     count: usize,
     key_size: u32,
 
-) -> Result<(Vec<ChrTreeChild>, usize), ChrTreeNodeError> {
+) -> Result<(Vec<ChrTreeChild>, usize), ParsingError> {
     if bytes.len() < start_offset + count * 8 {
-        return Err(ChrTreeNodeError::InvalidData("Not enough bytes for leaf nodes".into()));
+        return Err(ParsingError::InsufficientBytes);
     }
 
     let mut nodes: Vec<ChrTreeChild> = Vec::new();
@@ -54,10 +54,10 @@ fn read_non_leaf_nodes(
     count: usize,
     key_size: u32,
 
-) -> Result<(Vec<ChrTreeChild>, usize), ChrTreeNodeError> {
+) -> Result<(Vec<ChrTreeChild>, usize), ParsingError> {
 
     if bytes.len() < start_offset + count * 12 {
-        return Err(ChrTreeNodeError::InvalidData("Not enough bytes for non-leaf nodes".into()));
+        return Err(ParsingError::InsufficientBytes);
     }
 
     let mut nodes: Vec<ChrTreeChild> = Vec::with_capacity(count);
@@ -93,17 +93,17 @@ impl ChrTreeNode {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], offset: usize, key_size: u32) -> Result<(Self, usize), ChrTreeNodeError> {
+    pub fn from_bytes(bytes: &[u8], offset: usize, key_size: u32) -> Result<(Self, usize), ParsingError> {
 
         if bytes.len() < 4 {
-            return Err(ChrTreeNodeError::InvalidData("Not enough bytes for a complete node".into()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let is_leaf = bytes[offset] != 0;
         let reserved = bytes[offset + 1];
         let count = u16::from_le_bytes(bytes[offset + 2..offset + 4].try_into()?);
 
-        assert!(reserved == 0, "Node Reserved byte should be zero, found: {}", reserved);
+        assert_eq!(reserved, 0, "Node Reserved byte should be zero, found: {}", reserved);
 
         let (nodes, bytes_read) = if is_leaf {
             read_leaf_nodes(bytes, offset + 4, count as usize, key_size)?

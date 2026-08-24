@@ -1,3 +1,4 @@
+use crate::api::search_error::SearchError;
 // Copyright 2026 Seqa23
 //
 // Author: Andrew Warren
@@ -15,7 +16,6 @@
 use crate::api::search_options::SearchOptions;
 use crate::api::search_result::SearchResult;
 use crate::bigwig::bigbed_data::BigbedData;
-use crate::bigwig::bigbed_error::BigbedError;
 use crate::bigwig::index::bigwig_index::BigwigIndex;
 use crate::bigwig::index::chr_tree::BigwigChrTree;
 use crate::bigwig::index::r_tree::RTree;
@@ -52,7 +52,7 @@ pub fn data_to_lines(
     is_zoom: bool,
     chr_tree: &BigwigChrTree,
     options: &SearchOptions,
-) -> Result<Vec<String>, BigbedError> {
+) -> Result<Vec<String>, SearchError> {
     let mut str_array: Vec<String> = if options.include_header {
         if is_zoom {
             vec![ZoomData::COLUMNS
@@ -88,7 +88,7 @@ pub fn data_to_lines(
 pub async fn bigbed_search(
     store_service: &StoreService,
     options: &SearchOptions,
-) -> Result<SearchResult, BigbedError> {
+) -> Result<SearchResult, SearchError> {
     let mut result = SearchResult::new();
 
     // Reuse BigwigIndex since the index structure is identical
@@ -104,10 +104,10 @@ pub async fn bigbed_search(
     let chr_id = match index.chromosome_tree.get_chromosome_id(&options.chromosome) {
         Some(id) => id,
         _ => {
-            return Err(BigbedError::DataProcessingError(format!(
-                "Chromosome not found: {}",
-                options.chromosome
-            )));
+            return Err(SearchError::InvalidRequest {
+                requested: options.chromosome.to_string(),
+                reason: "Chromosome not found in index".to_string()
+            });
         }
     };
 
@@ -161,11 +161,11 @@ async fn get_index_end(
     store_service: &StoreService,
     index: &BigwigIndex,
     zoom_header: Option<&ZoomHeader>,
-) -> Result<u64, BigbedError> {
+) -> Result<u64, SearchError> {
     match zoom_header {
         Some(zoom_header) => Ok(index
             .get_end_for_zoom_header(store_service, zoom_header, &index.file_path)
             .await?),
-        None => Ok(index.get_full_index_end(store_service, &index.file_path).await?),
+        None => index.get_full_index_end(store_service, &index.file_path).await,
     }
 }

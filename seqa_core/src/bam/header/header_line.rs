@@ -14,7 +14,7 @@
 // limitations under the License.
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use crate::bam::bam_error::BamError;
+use crate::api::parsing_error::ParsingError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeaderLine {
@@ -23,15 +23,21 @@ pub struct HeaderLine {
 }
 
 impl HeaderLine {
-    pub fn from_line(line: &str) -> Result<HeaderLine, BamError> {
+    pub fn from_line(line: &str) -> Result<HeaderLine, ParsingError> {
         let tokens = line.split('\t').collect::<Vec<&str>>();
         if tokens.is_empty() {
-            return Err(BamError::HeaderParseError(line.to_string()));
+            return Err(ParsingError::InvalidHeaderLine {
+                reason: "Empty header line".to_string(),
+                line: line.to_string()
+            });
         }
         let code = tokens[0].to_string();
         let mut tags = Vec::new();
         for token in tokens.iter().skip(1) {
-            let (key, value) = token.split_once(':').ok_or_else(|| BamError::HeaderParseError(line.to_string()))?;
+            let (key, value) = token.split_once(':').ok_or_else(|| ParsingError::InvalidHeaderLine {
+                reason: "Invalid bam header line".to_string(),
+                line: line.to_string()
+            })?;
             tags.push((key.to_string(), value.to_string()));
         }
         Ok(HeaderLine { code, tags })

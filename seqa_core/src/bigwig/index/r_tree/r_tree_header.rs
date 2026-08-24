@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bigwig::index::r_tree::RTreeError;
+use crate::api::parsing_error::ParsingError;
 
 #[derive(Debug)]
 pub struct RTreeHeader {
@@ -48,9 +48,9 @@ impl RTreeHeader {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, RTreeError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParsingError> {
         if bytes.len() < RTreeHeader::SIZE {
-            return Err(RTreeError::RTreeReadError("Not enough bytes for a complete RTree header".into()));
+            return Err(ParsingError::InsufficientBytes);
         }
 
         let magic = u32::from_le_bytes(bytes[0..4].try_into()?);

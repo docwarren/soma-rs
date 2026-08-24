@@ -14,18 +14,7 @@
 // limitations under the License.
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
-use core::array::TryFromSliceError;
-
-#[derive(Debug, Error)]
-pub enum BigwigHeaderError {
-    #[error("Failed to parse BigwigHeader: {0}")]
-    HeaderError(String),
-
-    #[error("Parsing error: {0}")]
-    ParseError(#[from] TryFromSliceError),
-}
-
+use crate::api::parsing_error::ParsingError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BigwigHeader {
@@ -61,9 +50,9 @@ impl BigwigHeader {
 		}
 	}
 
-	pub fn from_bytes(bytes: &[u8]) -> Result<Self, BigwigHeaderError> {
+	pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParsingError> {
 		if bytes.len() < 64 {
-			return Err(BigwigHeaderError::HeaderError("Not enough bytes for a complete header".to_string()));
+			return Err(ParsingError::InsufficientBytes);
 		}
 
 		let magic = String::from_utf8_lossy(&bytes[0..4]).to_string();
