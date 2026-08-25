@@ -53,6 +53,12 @@ pub struct BigwigChrTree {
     pub name_map: HashMap<u32, String>, // Maps chromosome indices to their names
 }
 
+impl Default for BigwigChrTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BigwigChrTree {
 
     pub fn new() -> Self {

@@ -25,6 +25,12 @@ pub struct TotalSummary {
     pub sum_squares: f64,
 }
 
+impl Default for TotalSummary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TotalSummary {
     pub fn new() -> Self {
         TotalSummary {

@@ -37,14 +37,14 @@ pub fn decompress_auto(compressed_data: &[u8]) -> Result<Vec<u8>, CodecError> {
         return Ok(compressed_data.to_vec());
     }
 
-    let mut first_two = [0, 0];
-    first_two.copy_from_slice(compressed_data);
+    let mut first_two: [u8; 2] = [0, 0];
+    first_two.copy_from_slice(&compressed_data[0..2]);
 
-    let mut first_four = [0, 0, 0, 0];
-    first_four.copy_from_slice(compressed_data);
+    let mut first_four: [u8; 4] = [0, 0, 0, 0];
+    first_four.copy_from_slice(&compressed_data[0..4]);
 
-    let mut first_six = [0, 0, 0, 0, 0, 0];
-    first_six.copy_from_slice(compressed_data);
+    let mut first_six: [u8; 6] = [0, 0, 0, 0, 0, 0];
+    first_six.copy_from_slice(&compressed_data[0..6]);
 
     match first_two {
         // Gzip magic number
@@ -67,7 +67,6 @@ pub fn decompress_auto(compressed_data: &[u8]) -> Result<Vec<u8>, CodecError> {
         _ if first_six == [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00] => {
             Err(CodecError::CodecNotSupported("XZ/LZMA".to_string()))
         }
-
         // Try raw deflate as fallback
         _ => decompress_deflate(compressed_data),
     }

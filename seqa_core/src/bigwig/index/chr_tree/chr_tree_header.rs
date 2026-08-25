@@ -25,6 +25,12 @@ pub struct ChrTreeHeader {
     _reserved: u64,
 }
 
+impl Default for ChrTreeHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChrTreeHeader {
     pub const SIZE: usize = 32;
 

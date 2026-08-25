@@ -34,6 +34,12 @@ pub struct ZoomHeader {
     pub index_offset: u64
 }
 
+impl Default for ZoomHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ZoomHeader {
     pub fn new() -> Self {
         ZoomHeader {

@@ -51,13 +51,13 @@ pub async fn get_bigwig_header(store: &StoreService, path_str: &str) -> Result<B
 }
 
 pub async fn get_bigwig_detail_bytes(store: &StoreService, header: &BigwigHeader, path_str: &str) -> Result<Vec<u8>, SearchError> {
-    let index_range = 0u64..header.full_data_offset as u64 + 4;
-    Ok(store.get_range(path_str, index_range)
+    let index_range = 0u64..header.full_data_offset + 4;
+    store.get_range(path_str, index_range)
         .await
         .map_err(|e| SearchError::ReadError {
             path: path_str.to_string(),
             source: e
-        })?)
+        })
 }
 
 pub fn get_zoom_headers(header: &BigwigHeader, index_bytes: &[u8]) -> Result<Vec<ZoomHeader>, ParsingError> {

@@ -82,6 +82,12 @@ pub struct ChrTreeNode {
     pub children: Vec<ChrTreeChild>,
 }
 
+impl Default for ChrTreeNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChrTreeNode {
     
     pub fn new() -> Self {

@@ -87,7 +87,7 @@ async fn feature_search(
     payload: Result<Json<SearchRequest>, JsonRejection>,
 ) -> Result<String, ApiError> {
     let Json(request) = payload
-        .map_err(|e| ApiError::BadRequest("Invalid JSON payload".to_string()))?;
+        .map_err(|e| ApiError::BadRequest(format!("Invalid JSON payload: {}", e)))?;
 
     if !request.path.ends_with(".bam")
         && !request.path.ends_with(".vcf.gz")

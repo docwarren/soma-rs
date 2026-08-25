@@ -72,7 +72,7 @@ pub fn parse_coordinates(coords: &str) -> Result<(String, u32, u32), SearchError
         .ok_or(SearchError::InvalidCoordinateFormat(format!("Invalid chromosome: {}.", chromosome)))?;
 
     let (begin, end) = get_begin_end(&tokens, chr_idx)
-        .map_err(|_| SearchError::InvalidCoordinateFormat(format!("Could not parse chr, begin, end {}", coords)))?;
+        .map_err(|e| SearchError::InvalidCoordinateFormat(format!("Could not parse coordinates {}, {}", coords, e)))?;
     Ok((chromosome, begin, end))
 }
 

@@ -32,6 +32,12 @@ pub struct BigwigHeader {
 	pub reserved: u64,
 }
 
+impl Default for BigwigHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BigwigHeader {
 	pub fn new() -> Self {
 		BigwigHeader {
