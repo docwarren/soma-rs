@@ -13,17 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::Error;
 use std::sync::Arc;
-use std::fmt::{Display, Formatter};
-use anyhow::{Result, Context, bail};
 use axum::{
     Json, Router,
     extract::{Path, Request, State, rejection::JsonRejection},
     http::{Method, StatusCode, header, Uri},
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse},
     routing::{get, post},
 };
+use thiserror::Error;
 use serde::Serialize;
 use seqa_core::api::output_format::OutputFormat;
 use seqa_core::api::search_options::SearchOptions;
@@ -59,52 +57,24 @@ pub struct ErrorResponse {
     pub code: u16,
 }
 
-#[derive(Debug)]
-pub struct ApiError {
-    status_code: StatusCode,
-    error: anyhow::Error
-}
-
-impl ApiError {
-    fn new(status_code: StatusCode, error: anyhow::Error) -> Self {
-        ApiError {
-            status_code,
-            error
-        }
-    }
-
-    fn internal_server_error(e: anyhow::Error) -> Self {
-        Self::new(StatusCode::INTERNAL_SERVER_ERROR, e)
-    }
-
-    fn not_found(e: anyhow::Error) -> Self {
-        Self::new(StatusCode::NOT_FOUND, e)
-    }
-
-    fn bad_request(e: anyhow::Error) -> Self {
-        Self::new(StatusCode::BAD_REQUEST, e)
-    }
-}
-
-impl Display for ApiError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.status_code {
-            StatusCode::INTERNAL_SERVER_ERROR => write!(f, "Internal Server Error"),
-            StatusCode::NOT_FOUND => write!(f, "Not Found"),
-            StatusCode::BAD_REQUEST => write!(f, "Bad Request"),
-            _ => write!(f, "Unexpected Error")
-        }
-    }
+#[derive(Debug, Error)]
+pub enum ApiError {
+    #[error("Not found: {0}")]
+    NotFound(String),
+    #[error("Bad Request: {0}")]
+    BadRequest(String),
+    #[error("Internal Server Error: {0}")]
+    InternalError(String),
 }
 
 impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let status = self.status_code;
-        let body = ErrorResponse {
-            error: self.to_string(),
-            code: status.as_u16(),
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
+            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            ApiError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        (status, Json(body)).into_response()
+        (status, self.to_string()).into_response()
     }
 }
 
@@ -117,9 +87,7 @@ async fn feature_search(
     payload: Result<Json<SearchRequest>, JsonRejection>,
 ) -> Result<String, ApiError> {
     let Json(request) = payload
-        .map_err(|e| ApiError::bad_request(
-            anyhow::Error::msg(format!("Invalid JSON: {:?}", e))
-        ))?;
+        .map_err(|e| ApiError::BadRequest("Invalid JSON payload".to_string()))?;
 
     if !request.path.ends_with(".bam")
         && !request.path.ends_with(".vcf.gz")
@@ -133,17 +101,19 @@ async fn feature_search(
         && !request.path.ends_with(".bigbed")
         && !request.path.ends_with(".bw")
     {
-        bail!("Unsupported file type");
+        return Err(ApiError::BadRequest("Unsupported file type".to_string()));
     }
     if request.coordinates.is_empty() {
-        bail!("Missing coordinates");
+        return Err(ApiError::BadRequest("Empty coordinate string".to_string()))
     }
 
     let mut search_options = SearchOptions::new(&request.path, &request.coordinates);
     populate_from_cache(&state.cache, &mut search_options).await;
     let result = search_features(&state.store, &search_options)
         .await
-        .map_err(|e| ApiError::internal_server_error(anyhow!()))?
+        .map_err(|e|
+            ApiError::InternalError(format!("Search Failed: {:?}", e.to_string()))
+        )?;
     write_back_to_cache(&state.cache, &search_options, &result).await;
 
     Ok(result.lines.into_iter().collect::<Vec<String>>().join("\n"))
@@ -202,7 +172,7 @@ async fn list_dir(
         .store
         .list_objects(&dir)
         .await
-        .map_err(|e| ApiError::StoreError(format!("Failed to list {}: {}", dir, e)))?;
+        .map_err(|e| ApiError::NotFound(format!("Failed to list {}: {}", dir, e)))?;
 
     let entries: Vec<FileEntry> = objects
         .into_iter()
@@ -216,25 +186,31 @@ async fn list_dir(
     Ok(Json(entries))
 }
 
-async fn get_gene_symbols(Path(genome): Path<String>) -> Result<Json<Vec<String>>> {
-    let connection = sqlite::connect_genes(&genome)?;
-    let symbols = genes::get_gene_symbols(&connection)?;
+async fn get_gene_symbols(Path(genome): Path<String>) -> Result<Json<Vec<String>>, ApiError> {
+    let connection = sqlite::connect_genes(&genome)
+        .map_err(|e| ApiError::InternalError(format!("Error connecting to DB: {}", e)))?;
+    let symbols = genes::get_gene_symbols(&connection)
+        .map_err(|e| ApiError::InternalError(format!("Error fetching symbols from DB: {}", e)))?;
     Ok(Json(symbols))
 }
 
 async fn get_coordinates(
     Path((genome, gene)): Path<(String, String)>,
-) -> Result<Json<GeneCoordinate>> {
-    let connection = sqlite::connect_genes(&genome)?;
-    let coord = genes::get_gene_coordinates(&connection, &gene)?;
+) -> Result<Json<GeneCoordinate>, ApiError> {
+    let connection = sqlite::connect_genes(&genome)
+        .map_err(|e| ApiError::InternalError(format!("Error connecting to DB: {}", e)))?;
+    let coord = genes::get_gene_coordinates(&connection, &gene)
+        .map_err(|e| ApiError::InternalError(format!("Error fetching gene coordinates from DB: {}", e)))?;
     Ok(Json(coord))
 }
 
 async fn get_cytobands(
     Path((genome, chromosome)): Path<(String, String)>,
-) -> Result<Json<Vec<Cytoband>>> {
-    let connection = sqlite::connect_cytobands(&genome)?;
-    let cytobands = genes::get_cytobands(&connection, &chromosome)?;
+) -> Result<Json<Vec<Cytoband>>, ApiError> {
+    let connection = sqlite::connect_cytobands(&genome)
+        .map_err(|e| ApiError::InternalError(format!("Error connecting to DB: {}", e)))?;
+    let cytobands = genes::get_cytobands(&connection, &chromosome)
+        .map_err(|e| ApiError::InternalError(format!("Error fetching cytobands from DB: {}", e)))?;
     Ok(Json(cytobands))
 }
 
