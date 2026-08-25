@@ -72,11 +72,11 @@ pub fn parse_coordinates(coords: &str) -> Result<(String, u32, u32), SearchError
         .ok_or(SearchError::InvalidCoordinateFormat(format!("Invalid chromosome: {}.", chromosome)))?;
 
     let (begin, end) = get_begin_end(&tokens, chr_idx)
-        .map_err(|e| SearchError::InvalidCoordinateFormat(format!("Could not parse chr, begin, end {}", coords)))?;
+        .map_err(|_| SearchError::InvalidCoordinateFormat(format!("Could not parse chr, begin, end {}", coords)))?;
     Ok((chromosome, begin, end))
 }
 
-fn get_begin_end(tokens: &Vec<&str>, chr_idx: usize) -> Result<(u32, u32), ParsingError> {
+fn get_begin_end(tokens: &[&str], chr_idx: usize) -> Result<(u32, u32), ParsingError> {
     let longest_genome = get_longest_possible_genome();
     if tokens.len() == 2 {
         let parts: Vec<String> = tokens[1].split('-').map(|s| s.replace(",", "")).collect();
