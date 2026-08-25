@@ -15,8 +15,8 @@
 
 use super::constants::MAX_BIN_SIZE;
 
-fn update_bins(mut k: u32, maxk: u32, bins: &mut [u32; MAX_BIN_SIZE], i: &mut usize) {
-    while k <= maxk && *i < MAX_BIN_SIZE {
+fn update_bins(mut k: u32, max_k: u32, bins: &mut [u32; MAX_BIN_SIZE], i: &mut usize) {
+    while k <= max_k && *i < MAX_BIN_SIZE {
         bins[*i] = k;
         k += 1;
         *i += 1;
@@ -30,26 +30,26 @@ pub fn region_to_bins(begin: u32, end: u32, bins: &mut [u32; MAX_BIN_SIZE]) -> u
     i += 1;
 
     let k:u32 = 1 + (begin >> 26);
-    let maxk: u32 = 1 + (end >> 26);
-    update_bins(k, maxk, bins, &mut i);
+    let max_k: u32 = 1 + (end >> 26);
+    update_bins(k, max_k, bins, &mut i);
 
     let k:u32 = 9 + (begin >> 23);
-    let maxk: u32 = 9 + (end >> 23);
-    update_bins(k, maxk, bins, &mut i);
+    let max_k: u32 = 9 + (end >> 23);
+    update_bins(k, max_k, bins, &mut i);
 
     let k:u32 = 73 + (begin >> 20);
-    let maxk: u32 = 73 + (end >> 20);
-    update_bins(k, maxk, bins, &mut i);
+    let max_k: u32 = 73 + (end >> 20);
+    update_bins(k, max_k, bins, &mut i);
 
     let k:u32 = 585 + (begin >> 17);
-    let maxk: u32 = 585 + (end >> 17);
-    update_bins(k, maxk, bins, &mut i);
+    let max_k: u32 = 585 + (end >> 17);
+    update_bins(k, max_k, bins, &mut i);
 
     let k:u32 = 4681 + (begin >> 14);
-    let maxk: u32 = 4681 + (end >> 14);
-    update_bins(k, maxk, bins, &mut i);
+    let max_k: u32 = 4681 + (end >> 14);
+    update_bins(k, max_k, bins, &mut i);
 
-    i as usize
+    i
 }
 
 pub fn get_bin_numbers(begin: u32, end: u32) -> Vec<u32> {

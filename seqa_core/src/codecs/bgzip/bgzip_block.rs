@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codecs::bgzip::BgZipError;
+use crate::codecs::codec_error::CodecError;
 
 pub struct SubBlock {
     pub s1: u8,
@@ -37,8 +37,8 @@ pub struct BgZipBlock {
     pub i_size: u32
 }
 
-impl BgZipBlock {
-    pub fn new() -> Self {
+impl Default for BgZipBlock {
+    fn default() -> Self {
         BgZipBlock {
             id1: 0,
             id2: 0,
@@ -59,12 +59,23 @@ impl BgZipBlock {
             i_size: 0
         }
     }
+}
 
-    pub fn from_bytes(bytes: &Vec<u8>, mut i: usize) -> Result<BgZipBlock, BgZipError> {
+impl BgZipBlock {
+    pub fn new() -> Self {
+        BgZipBlock::default()
+    }
+
+    pub fn from_bytes(bytes: &[u8], mut i: usize) -> Result<BgZipBlock, CodecError> {
         let mut bgzip = BgZipBlock::new();
         let start_i = i;
-        if bytes.len() - i < 18 {
-            return Err(BgZipError::ReadBlockError("Not enough data to read the header".into()));
+
+        let remaining = bytes.len() - i;
+        if remaining < 18 {
+            return Err(CodecError::ByteLengthError{
+                expected: 18,
+                actual: bytes.len() - i
+            });
         }
 
         // Read the header
@@ -76,13 +87,26 @@ impl BgZipBlock {
         i += 1;
         bgzip.flg = bytes[i];
         i += 1;
-        bgzip.mtime = u32::from_le_bytes(bytes[i..i+4].try_into().map_err(|_| BgZipError::ReadBlockError("Failed to read mtime".into()))?);
+
+        bgzip.mtime = u32::from_le_bytes(bytes[i..i+4]
+            .try_into()
+            .map_err(|e| CodecError::ParsingError {
+                field: "mtime".to_string(),
+                source: Box::new(e)
+            })?);
         i += 4;
+
         bgzip.xfl = bytes[i];
         i += 1;
         bgzip.os = bytes[i];
         i += 1;
-        bgzip.xlen = u16::from_le_bytes(bytes[i..i+2].try_into().map_err(|_| BgZipError::ReadBlockError("Failed to read xlen".into()))?);
+
+        bgzip.xlen = u16::from_le_bytes(bytes[i..i+2]
+            .try_into()
+            .map_err(|e| CodecError::ParsingError {
+                field: "xlen".to_string(),
+                source: Box::new(e)
+            })?);
         i += 2;
 
         let xtra_fields_end = i + bgzip.xlen as usize;
@@ -91,14 +115,29 @@ impl BgZipBlock {
         let sub_block = SubBlock {
             s1: bytes[i],
             s2: bytes[i + 1],
-            slen: u16::from_le_bytes(bytes[i + 2..i + 4].try_into().map_err(|_| BgZipError::ReadBlockError("Failed to read subfield slen".into()))?),
-            bsize: u16::from_le_bytes(bytes[i + 4..i + 6].try_into().map_err(|_| BgZipError::ReadBlockError("Failed to read subfield bsize".into()))?)
+            slen: u16::from_le_bytes(bytes[i + 2..i + 4]
+                .try_into()
+                .map_err(|e| CodecError::ParsingError {
+                    field: "slen".to_string(),
+                    source: Box::new(e)
+                })?),
+            bsize: u16::from_le_bytes(bytes[i + 4..i + 6]
+                .try_into()
+                .map_err(|e| CodecError::ParsingError {
+                    field: "bsize".to_string(),
+                    source: Box::new(e)
+                })?)
         };
         i += 6;
         bgzip.sub_block = sub_block;
 
-        if bytes.len() - start_i < bgzip.sub_block.bsize as usize {
-            return Err(BgZipError::ReadBlockError("Not enough data to read the compressed data".into()));
+        let expected = bgzip.sub_block.bsize as usize;
+        let actual =  bytes.len() - start_i;
+        if actual < expected {
+            return Err(CodecError::ByteLengthError {
+                expected,
+                actual
+            });
         }
         // Skip the remainder of the extra fields
         while i < xtra_fields_end {
@@ -111,9 +150,20 @@ impl BgZipBlock {
         i += cdata_len;
 
         // Read CRC and ISIZE
-        bgzip.crc = u32::from_le_bytes(bytes[i..i+4].try_into().map_err(|_| BgZipError::ReadBlockError("Failed to read crc".into()))?);
+        bgzip.crc = u32::from_le_bytes(bytes[i..i+4]
+            .try_into()
+            .map_err(|e| CodecError::ParsingError {
+                field: "crc".to_string(),
+                source: Box::new(e)
+            })?);
         i += 4;
-        bgzip.i_size = u32::from_le_bytes(bytes[i..i+4].try_into().map_err(|_| BgZipError::ReadBlockError("Failed to read i_size".into()))?);
+
+        bgzip.i_size = u32::from_le_bytes(bytes[i..i+4]
+            .try_into()
+            .map_err(|e| CodecError::ParsingError {
+                field: "i_size".to_string(),
+                source: Box::new(e)
+            })?);
 
         Ok(bgzip)
     }

@@ -14,26 +14,23 @@
 // limitations under the License.
 
 use std::sync::Arc;
-
 use axum::{
     Json, Router,
     extract::{Path, Request, State, rejection::JsonRejection},
     http::{Method, StatusCode, header, Uri},
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse},
     routing::{get, post},
 };
+use thiserror::Error;
 use serde::Serialize;
 use seqa_core::api::output_format::OutputFormat;
-use seqa_core::api::search::SearchFeaturesError;
 use seqa_core::api::search_options::SearchOptions;
 use seqa_core::models::cytoband::Cytoband;
 use seqa_core::models::gene_coordinate::GeneCoordinate;
-use seqa_core::sqlite::{self, genes::{self, GeneError}};
+use seqa_core::sqlite::{self, genes::self};
 use seqa_core::stores::StoreService;
-use seqa_core::utils::UtilError;
-use thiserror::Error;
 use tower_http::cors::CorsLayer;
-
+use seqa_core::api::search::search_features;
 use crate::cache::AppCache;
 use crate::search::models::SearchRequest;
 
@@ -62,66 +59,22 @@ pub struct ErrorResponse {
 
 #[derive(Debug, Error)]
 pub enum ApiError {
-    #[error("Internal server error")]
-    InternalServerError,
-
     #[error("Not found: {0}")]
     NotFound(String),
-
-    #[error("Bad request: {0}")]
+    #[error("Bad Request: {0}")]
     BadRequest(String),
-
-    #[error("Database error: {0}")]
-    DatabaseError(String),
-
-    #[error("Search error: {0}")]
-    SearchError(#[from] SearchFeaturesError),
-
-    #[error("SQLite error: {0}")]
-    SqliteError(#[from] rusqlite::Error),
-
-    #[error("Invalid search request: {0}")]
-    UtilError(#[from] UtilError),
-
-    #[error("Storage error: {0}")]
-    StoreError(String),
-
-    #[error("Gene lookup error: {0}")]
-    GeneError(#[from] GeneError),
-
-    #[error("Patient not found: {0}")]
-    PatientNotFound(String),
-
-    #[error("User not found: {0}")]
-    UserNotFound(String),
-}
-
-impl ApiError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            ApiError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
-            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            ApiError::DatabaseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::SearchError(_) => StatusCode::BAD_REQUEST,
-            ApiError::SqliteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::UtilError(_) => StatusCode::BAD_REQUEST,
-            ApiError::StoreError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::GeneError(_) => StatusCode::NOT_FOUND,
-            ApiError::PatientNotFound(_) => StatusCode::NOT_FOUND,
-            ApiError::UserNotFound(_) => StatusCode::NOT_FOUND,
-        }
-    }
+    #[error("Internal Server Error: {0}")]
+    InternalError(String),
 }
 
 impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let status = self.status_code();
-        let body = ErrorResponse {
-            error: self.to_string(),
-            code: status.as_u16(),
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
+            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            ApiError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        (status, Json(body)).into_response()
+        (status, self.to_string()).into_response()
     }
 }
 
@@ -129,11 +82,12 @@ async fn index() -> &'static str {
     "Hello world"
 }
 
-async fn search_features(
+async fn feature_search(
     State(state): State<AppState>,
     payload: Result<Json<SearchRequest>, JsonRejection>,
 ) -> Result<String, ApiError> {
-    let Json(request) = payload.map_err(|e| ApiError::BadRequest(e.body_text()))?;
+    let Json(request) = payload
+        .map_err(|e| ApiError::BadRequest(format!("Invalid JSON payload: {}", e)))?;
 
     if !request.path.ends_with(".bam")
         && !request.path.ends_with(".vcf.gz")
@@ -147,15 +101,19 @@ async fn search_features(
         && !request.path.ends_with(".bigbed")
         && !request.path.ends_with(".bw")
     {
-        return Err(ApiError::BadRequest("Unsupported file type".into()));
+        return Err(ApiError::BadRequest("Unsupported file type".to_string()));
     }
     if request.coordinates.is_empty() {
-        return Err(ApiError::BadRequest("Missing coordinates".into()));
+        return Err(ApiError::BadRequest("Empty coordinate string".to_string()))
     }
 
     let mut search_options = SearchOptions::new(&request.path, &request.coordinates);
     populate_from_cache(&state.cache, &mut search_options).await;
-    let result = state.store.search_features(&search_options).await?;
+    let result = search_features(&state.store, &search_options)
+        .await
+        .map_err(|e|
+            ApiError::InternalError(format!("Search Failed: {:?}", e.to_string()))
+        )?;
     write_back_to_cache(&state.cache, &search_options, &result).await;
 
     Ok(result.lines.into_iter().collect::<Vec<String>>().join("\n"))
@@ -214,7 +172,7 @@ async fn list_dir(
         .store
         .list_objects(&dir)
         .await
-        .map_err(|e| ApiError::StoreError(format!("Failed to list {}: {}", dir, e)))?;
+        .map_err(|e| ApiError::NotFound(format!("Failed to list {}: {}", dir, e)))?;
 
     let entries: Vec<FileEntry> = objects
         .into_iter()
@@ -229,24 +187,30 @@ async fn list_dir(
 }
 
 async fn get_gene_symbols(Path(genome): Path<String>) -> Result<Json<Vec<String>>, ApiError> {
-    let connection = sqlite::connect_genes(&genome)?;
-    let symbols = genes::get_gene_symbols(&connection)?;
+    let connection = sqlite::connect_genes(&genome)
+        .map_err(|e| ApiError::InternalError(format!("Error connecting to DB: {}", e)))?;
+    let symbols = genes::get_gene_symbols(&connection)
+        .map_err(|e| ApiError::InternalError(format!("Error fetching symbols from DB: {}", e)))?;
     Ok(Json(symbols))
 }
 
 async fn get_coordinates(
     Path((genome, gene)): Path<(String, String)>,
 ) -> Result<Json<GeneCoordinate>, ApiError> {
-    let connection = sqlite::connect_genes(&genome)?;
-    let coord = genes::get_gene_coordinates(&connection, &gene)?;
+    let connection = sqlite::connect_genes(&genome)
+        .map_err(|e| ApiError::InternalError(format!("Error connecting to DB: {}", e)))?;
+    let coord = genes::get_gene_coordinates(&connection, &gene)
+        .map_err(|e| ApiError::InternalError(format!("Error fetching gene coordinates from DB: {}", e)))?;
     Ok(Json(coord))
 }
 
 async fn get_cytobands(
     Path((genome, chromosome)): Path<(String, String)>,
 ) -> Result<Json<Vec<Cytoband>>, ApiError> {
-    let connection = sqlite::connect_cytobands(&genome)?;
-    let cytobands = genes::get_cytobands(&connection, &chromosome)?;
+    let connection = sqlite::connect_cytobands(&genome)
+        .map_err(|e| ApiError::InternalError(format!("Error connecting to DB: {}", e)))?;
+    let cytobands = genes::get_cytobands(&connection, &chromosome)
+        .map_err(|e| ApiError::InternalError(format!("Error fetching cytobands from DB: {}", e)))?;
     Ok(Json(cytobands))
 }
 
@@ -279,7 +243,7 @@ pub fn app() -> Router {
 
     Router::new()
         .route("/", get(index))
-        .route("/search", post(search_features))
+        .route("/search", post(feature_search))
         .route("/files", post(list_dir))
         .route("/genes/symbols/{genome}", get(get_gene_symbols))
         .route("/genes/coordinates/{genome}/{gene}", get(get_coordinates))

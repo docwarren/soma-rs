@@ -1,0 +1,10 @@
+pub mod bam_search;
+pub mod bai;
+pub mod read;
+pub mod cigar;
+pub mod qual;
+pub mod tags;
+pub mod seq;
+pub mod cigar_op;
+pub mod read_utils;
+pub mod header;

@@ -13,15 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Individual codec implementations used internally by the index parsers.
-pub mod gzip;
 /// BGZF (Blocked GZIP Format) used by BAM and bgzipped tabix files.
 pub mod bgzip;
+pub mod codec_error;
 pub mod deflate;
+/// Individual codec implementations used internally by the index parsers.
+pub mod gzip;
 pub mod zlib;
 
-use flate2::read::{GzDecoder, ZlibDecoder, DeflateDecoder};
-use std::io::Read;
+use crate::codecs::codec_error::CodecError;
+use crate::codecs::deflate::decompress_deflate;
+use crate::codecs::gzip::gzip_decompress;
+use crate::codecs::zlib::decompress_zlib;
 
 /// Decompresses `compressed_data`
 /// Checks the header for the compression type. If its not bgzip then an error is thrown
@@ -29,66 +32,42 @@ use std::io::Read;
 ///
 /// Returns an error when an unsupported compression format is detected, or when
 /// a supported decompressor encounters a malformed stream.
-pub fn decompress_auto(compressed_data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-   if compressed_data.len() < 2 {
-       return Ok(compressed_data.to_vec());
-   }
-   
-   let first_two = (compressed_data[0], compressed_data[1]);
-   let first_four = if compressed_data.len() >= 4 {
-       [compressed_data[0], compressed_data[1], compressed_data[2], compressed_data[3]]
-   } else {
-       [0, 0, 0, 0]
-   };
-   
-   match first_two {
-       // Gzip magic number
-       (0x1f, 0x8b) => {
-           let mut decoder = GzDecoder::new(compressed_data);
-           let mut decompressed = Vec::new();
-           decoder.read_to_end(&mut decompressed)?;
-           Ok(decompressed)
-       },
-       
-       // Zlib magic numbers (0x78 followed by various flags)
-       (0x78, 0x01) | (0x78, 0x5e) | (0x78, 0x9c) | (0x78, 0xda) => {
-           let mut decoder = ZlibDecoder::new(compressed_data);
-           let mut decompressed = Vec::new();
-           decoder.read_to_end(&mut decompressed)?;
-           Ok(decompressed)
-       },
-       
-       // Bzip2 magic number
-       (0x42, 0x5a) => {
-           return Err("Bzip2 compression not supported".into());
-       },
-       
-       // Zstd magic number (first 4 bytes: 0x28, 0xb5, 0x2f, 0xfd)
-       _ if first_four == [0x28, 0xb5, 0x2f, 0xfd] => {
-           return Err("Zstd compression not supported".into());
-       },
-       
-       // XZ/LZMA magic number (first 6 bytes start with 0xfd, 0x37, 0x7a, 0x58, 0x5a)
-       _ if compressed_data.len() >= 6 && 
-            compressed_data[0..6] == [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00] => {
-           return Err("XZ/LZMA compression not supported".into());
-       },
-       
-       // Try raw deflate as fallback
-       _ => {
-           match DeflateDecoder::new(compressed_data).read_to_end(&mut Vec::new()) {
-               Ok(_) => {
-                   let mut decoder = DeflateDecoder::new(compressed_data);
-                   let mut decompressed = Vec::new();
-                   decoder.read_to_end(&mut decompressed)?;
-                   Ok(decompressed)
-               },
-               Err(_) => {
-                   // If all decompression methods fail, return data as-is
-                   // (might not actually be compressed)
-                   Ok(compressed_data.to_vec())
-               }
-           }
-       }
-   }
+pub fn decompress_auto(compressed_data: &[u8]) -> Result<Vec<u8>, CodecError> {
+    if compressed_data.len() < 2 {
+        return Ok(compressed_data.to_vec());
+    }
+
+    let mut first_two: [u8; 2] = [0, 0];
+    first_two.copy_from_slice(&compressed_data[0..2]);
+
+    let mut first_four: [u8; 4] = [0, 0, 0, 0];
+    first_four.copy_from_slice(&compressed_data[0..4]);
+
+    let mut first_six: [u8; 6] = [0, 0, 0, 0, 0, 0];
+    first_six.copy_from_slice(&compressed_data[0..6]);
+
+    match first_two {
+        // Gzip magic number
+        [0x1f, 0x8b] => gzip_decompress(compressed_data),
+
+        // Zlib magic numbers (0x78 followed by various flags)
+        [0x78, 0x01] | [0x78, 0x5e] | [0x78, 0x9c] | [0x78, 0xda] => {
+            decompress_zlib(compressed_data)
+        }
+
+        // Bzip2 magic number
+        [0x42, 0x5a] => Err(CodecError::CodecNotSupported("Bzip2".to_string())),
+
+        // ZStd magic number (first 4 bytes: 0x28, 0xb5, 0x2f, 0xfd)
+        _ if first_four == [0x28, 0xb5, 0x2f, 0xfd] => {
+            Err(CodecError::CodecNotSupported("ZStd".to_string()))
+        }
+
+        // XZ/LZMA magic number (first 6 bytes start with 0xfd, 0x37, 0x7a, 0x58, 0x5a)
+        _ if first_six == [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00] => {
+            Err(CodecError::CodecNotSupported("XZ/LZMA".to_string()))
+        }
+        // Try raw deflate as fallback
+        _ => decompress_deflate(compressed_data),
+    }
 }

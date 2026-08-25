@@ -13,17 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod vcf;
-pub mod bed;
-pub mod bedgraph;
-pub mod gff;
-pub mod gtf;
-pub mod constants;
-pub mod bam_header;
-pub mod bam;
-pub mod bigwig;
-pub mod bigbed;
-pub mod tabix_header;
 pub mod gene_coordinate;
 pub mod cytoband;
 pub mod coordinates;
