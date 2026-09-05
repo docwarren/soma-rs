@@ -21,8 +21,10 @@ use futures::StreamExt;
 use log::info;
 use object_store::path::Path as ObjectStorePath;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreScheme, PutPayload};
+use serde::{Deserialize, Serialize};
 use url::Url;
 
+pub mod buckets;
 pub mod error;
 pub mod store;
 
@@ -46,6 +48,27 @@ use error::StoreError;
 #[derive(Debug, Default)]
 pub struct StoreService {
     stores: Mutex<HashMap<String, Arc<dyn ObjectStore>>>,
+}
+
+/// One entry in a directory listing — a file or a folder-like prefix.
+///
+/// `uri` is a fully-qualified, absolute URI that can be passed straight back
+/// into [`StoreService`].  This matters: `ObjectMeta::location` is *store
+/// relative* (a local listing yields `home/drew/x.bam`, an S3 listing yields the
+/// key without its bucket), so returning it raw would produce paths that cannot
+/// be used for a subsequent call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirectoryEntry {
+    /// Absolute URI, safe to pass back to any `StoreService` method.
+    pub uri: String,
+    /// Final path segment, for display.
+    pub name: String,
+    /// True for folder-like prefixes, which carry no size or timestamp.
+    pub is_directory: bool,
+    pub size: u64,
+    /// RFC 3339 timestamp, empty for directories.
+    pub last_modified: String,
 }
 
 impl StoreService {
@@ -272,5 +295,296 @@ impl StoreService {
         }
 
         Ok(results)
+    }
+
+    /// The URI prefix that a store's relative locations hang off.
+    ///
+    /// `ObjectMeta::location` is relative to whatever the store is rooted at, and
+    /// that root differs per backend: `LocalFileSystem` at `/`, S3 and GCS at a
+    /// bucket, Azure at a *container which is itself inside an account*.  Azure
+    /// is the reason this derives the root from the URI rather than from a
+    /// scheme-and-bucket pair: rebuilding `az://{container}/…` silently drops
+    /// the account, producing a URI that cannot be listed.
+    pub fn store_root_uri(prefix: &str) -> Result<String, StoreError> {
+        let url = Url::parse(prefix)?;
+        let (scheme, _) = Self::get_obj_scheme_and_path(prefix)?;
+
+        match scheme {
+            // Three slashes: the local root is `file:///`, so joining a
+            // relative location onto it yields `file:///home/...`.
+            ObjectStoreScheme::Local => Ok("file:///".to_string()),
+            ObjectStoreScheme::MicrosoftAzure => {
+                let account = url.host_str().unwrap_or_default();
+                let container = url
+                    .path_segments()
+                    .and_then(|mut segments| segments.next())
+                    .unwrap_or_default();
+
+                if container.is_empty() {
+                    return Err(StoreError::ValidationError(
+                        "Azure path is missing a container".into(),
+                    ));
+                }
+                Ok(format!("az://{account}/{container}"))
+            }
+            ObjectStoreScheme::Http => Ok(prefix.trim_end_matches('/').to_string()),
+            _ => Ok(format!(
+                "{}://{}",
+                url.scheme(),
+                url.host_str().unwrap_or_default()
+            )),
+        }
+    }
+
+    /// Joins a store-relative location onto its root, yielding an absolute URI.
+    fn to_uri(root_uri: &str, location: &str) -> String {
+        let location = location.trim_start_matches('/');
+
+        // The local root already ends in a slash; the cloud roots do not.
+        if root_uri.ends_with('/') {
+            format!("{root_uri}{location}")
+        } else {
+            format!("{root_uri}/{location}")
+        }
+    }
+
+    /// Final path segment of a store location, used as the display name.
+    fn base_name(location: &str) -> String {
+        location
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .unwrap_or(location)
+            .to_string()
+    }
+
+    /// Lists one level of `prefix`, without recursing.
+    ///
+    /// Unlike [`Self::list_objects`], which walks the entire subtree and returns
+    /// objects only, this uses `list_with_delimiter` so folder-like prefixes come
+    /// back as directory entries.  That makes it usable for an expandable file
+    /// browser, where each expansion costs exactly one call.
+    ///
+    /// `prefix` must be a fully-formed URI (`file:///…`, `s3://…`, `gs://…`,
+    /// `az://…`).  Directories sort before files, each alphabetically.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] if the URI cannot be parsed, the backend cannot be
+    /// built (usually missing credentials), or the listing call fails.
+    pub async fn list_directory(&self, prefix: &str) -> Result<Vec<DirectoryEntry>, StoreError> {
+        let (_, canonical) = Self::get_obj_scheme_and_path(prefix)?;
+        let root_uri = Self::store_root_uri(prefix)?;
+        let store = self.get_or_create_store(prefix)?;
+
+        let listing = store
+            .list_with_delimiter(Some(&canonical))
+            .await
+            .map_err(|e| StoreError::ListError(e.to_string()))?;
+
+        let mut entries: Vec<DirectoryEntry> = Vec::new();
+
+        for directory in listing.common_prefixes {
+            let location = directory.as_ref();
+            entries.push(DirectoryEntry {
+                uri: Self::to_uri(&root_uri, location),
+                name: Self::base_name(location),
+                is_directory: true,
+                size: 0,
+                last_modified: String::new(),
+            });
+        }
+
+        let prefix_path = canonical.as_ref().trim_end_matches('/');
+
+        for object in listing.objects {
+            let location = object.location.as_ref();
+
+            // Skip directory placeholders. Consoles and SDKs create a zero-byte
+            // object with the same key as the prefix to make an "empty folder"
+            // visible. Returned as a file it is both meaningless to the user and
+            // actively harmful: its URI equals its own parent's, so a tree that
+            // renders children by URI recurses into itself forever.
+            if location.trim_end_matches('/') == prefix_path {
+                continue;
+            }
+
+            entries.push(DirectoryEntry {
+                uri: Self::to_uri(&root_uri, location),
+                name: Self::base_name(location),
+                is_directory: false,
+                size: object.size,
+                last_modified: object.last_modified.to_rfc3339(),
+            });
+        }
+
+        entries.sort_by(|a, b| {
+            b.is_directory
+                .cmp(&a.is_directory)
+                .then_with(|| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()))
+        });
+
+        Ok(entries)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mock_data_uri() -> String {
+        format!("file://{}/mock_data", env!("CARGO_MANIFEST_DIR"))
+    }
+
+    #[test]
+    fn test_store_root_uri_per_backend() {
+        // Azure is the interesting one: the account lives in the host and the
+        // container in the first path segment, so a root built from the
+        // container alone would drop the account.
+        assert_eq!(
+            StoreService::store_root_uri("az://genreblobs/genre-test-data").unwrap(),
+            "az://genreblobs/genre-test-data"
+        );
+        assert_eq!(
+            StoreService::store_root_uri("az://genreblobs/genre-test-data/sub/x.bw").unwrap(),
+            "az://genreblobs/genre-test-data"
+        );
+        assert_eq!(
+            StoreService::store_root_uri("s3://my-bucket/data/x.bam").unwrap(),
+            "s3://my-bucket"
+        );
+        assert_eq!(
+            StoreService::store_root_uri("gs://b/x.bam").unwrap(),
+            "gs://b"
+        );
+        assert_eq!(
+            StoreService::store_root_uri("file:///home/drew").unwrap(),
+            "file:///"
+        );
+        // An Azure URI with no container cannot be listed.
+        assert!(StoreService::store_root_uri("az://genreblobs").is_err());
+    }
+
+    #[test]
+    fn test_to_uri_rebuilds_absolute_paths() {
+        // `ObjectMeta::location` is store-relative; these are the round trips
+        // that make a returned entry usable as the next call's input.
+        assert_eq!(
+            StoreService::to_uri("file:///", "home/drew/x.bam"),
+            "file:///home/drew/x.bam"
+        );
+        assert_eq!(
+            StoreService::to_uri("s3://my-bucket", "data/x.bam"),
+            "s3://my-bucket/data/x.bam"
+        );
+        assert_eq!(
+            StoreService::to_uri("gs://b", "x.bam"),
+            "gs://b/x.bam"
+        );
+        assert_eq!(
+            StoreService::to_uri("az://genreblobs/genre-test-data", "density.bw"),
+            "az://genreblobs/genre-test-data/density.bw"
+        );
+    }
+
+    #[test]
+    fn test_base_name() {
+        assert_eq!(StoreService::base_name("a/b/c.bam"), "c.bam");
+        assert_eq!(StoreService::base_name("a/b/"), "b");
+        assert_eq!(StoreService::base_name("solo.bam"), "solo.bam");
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_local() {
+        let service = StoreService::new();
+        let entries = service.list_directory(&mock_data_uri()).await.unwrap();
+
+        // Every URI must be absolute and round-trippable.
+        for entry in &entries {
+            assert!(
+                entry.uri.starts_with("file:///"),
+                "expected absolute file URI, got {}",
+                entry.uri
+            );
+        }
+
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"test.txt"));
+        assert!(names.contains(&"NA12878.gatk.cnv.vcf.gz"));
+
+        let vcf = entries
+            .iter()
+            .find(|e| e.name == "NA12878.gatk.cnv.vcf.gz")
+            .unwrap();
+        assert!(!vcf.is_directory);
+        assert!(vcf.size > 0);
+        assert!(!vcf.last_modified.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_is_not_recursive() {
+        // The parent of mock_data contains src/, which is deep. A recursive walk
+        // would return src/**; a delimiter listing returns src/ as one entry.
+        let service = StoreService::new();
+        let parent = format!("file://{}", env!("CARGO_MANIFEST_DIR"));
+        let entries = service.list_directory(&parent).await.unwrap();
+
+        assert!(entries.iter().any(|e| e.name == "src" && e.is_directory));
+        assert!(
+            entries.iter().all(|e| !e.name.contains("stores")),
+            "listing recursed into subdirectories"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_sorts_directories_first() {
+        let service = StoreService::new();
+        let parent = format!("file://{}", env!("CARGO_MANIFEST_DIR"));
+        let entries = service.list_directory(&parent).await.unwrap();
+
+        let first_file = entries.iter().position(|e| !e.is_directory);
+        let last_directory = entries.iter().rposition(|e| e.is_directory);
+        if let (Some(file), Some(directory)) = (first_file, last_directory) {
+            assert!(directory < file, "directories must sort before files");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_skips_directory_placeholders() {
+        // S3 consoles create a zero-byte object with the same key as the prefix
+        // to represent an empty folder. Returning it as a file gives it a URI
+        // identical to its own parent's, which makes a URI-keyed tree recurse
+        // into itself. Local listings cannot produce one, so this asserts the
+        // filter directly.
+        let prefix = "data/sub";
+        assert_eq!("data/sub/".trim_end_matches('/'), prefix);
+        assert_eq!("data/sub".trim_end_matches('/'), prefix);
+        // A genuine child is not filtered.
+        assert_ne!("data/sub/file.bam".trim_end_matches('/'), prefix);
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_entries_differ_from_parent() {
+        // Whatever the backend, no entry may carry its parent's own URI.
+        let service = StoreService::new();
+        let parent = format!("file://{}", env!("CARGO_MANIFEST_DIR"));
+        let entries = service.list_directory(&parent).await.unwrap();
+
+        for entry in &entries {
+            assert_ne!(
+                entry.uri.trim_end_matches('/'),
+                parent.trim_end_matches('/'),
+                "entry {} repeats its parent URI",
+                entry.name
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_rejects_non_uri() {
+        let service = StoreService::new();
+        // A bare path has no scheme, so URI parsing fails with a clear error
+        // rather than silently listing something unexpected.
+        assert!(service.list_directory("/tmp").await.is_err());
     }
 }

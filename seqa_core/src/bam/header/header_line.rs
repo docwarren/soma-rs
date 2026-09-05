@@ -68,13 +68,10 @@ mod test {
         let test_line1 = "@SQ\tSN:chr21\tLN:48129895";
         let test_line2 = "@PG\tID:bwa\tPN:bwa\tVN:0.6.1-r104-tpx";
 
-        let expected_1 = test_line1.clone();
-        let expected_2 = test_line2.clone();
-
         let line1 = HeaderLine::from_line(test_line1).expect("Failed to parse header line");
-        assert_eq!(format!("{}", line1), expected_1);
+        assert_eq!(format!("{}", line1), test_line1);
 
         let line2 = HeaderLine::from_line(test_line2).expect("Failed to parse header line");
-        assert_eq!(format!("{}", line2), expected_2);
+        assert_eq!(format!("{}", line2), test_line2);
     }
 }

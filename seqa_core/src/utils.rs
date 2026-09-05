@@ -14,6 +14,8 @@
 // limitations under the License.
 use std::path::absolute;
 
+use serde::{Deserialize, Serialize};
+
 use crate::api::output_format::OutputFormat;
 use crate::api::parsing_error::ParsingError;
 use crate::api::search_error::SearchError;
@@ -95,73 +97,153 @@ fn get_begin_end(tokens: &[&str], chr_idx: usize) -> Result<(u32, u32), ParsingE
     }
 }
 
+/// A supported genomic file format, its extensions, and how its index is found.
+///
+/// This table is the single source of truth for extension handling.  Both
+/// [`get_output_format`] and [`get_index_path`] derive from it, so they cannot
+/// drift apart as the two hand-written if-else chains they replaced did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormatSpec {
+    /// The format these extensions map to.
+    pub format: OutputFormat,
+    /// Recognised extensions, each including the leading dot.
+    pub extensions: &'static [&'static str],
+    /// Extension appended to the data file to locate its index, or `None` when
+    /// the index is embedded in the file itself (BigWig, BigBed).
+    pub index_extension: Option<&'static str>,
+}
+
+/// Every format the search engine can query.
+///
+/// Text-based tabix formats appear only in their bgzipped form — a plain
+/// `.vcf`, `.bed` or `.gff` cannot be range-queried, so offering it would
+/// produce a file that fails at load time.
+pub const SUPPORTED_FORMATS: &[FormatSpec] = &[
+    FormatSpec {
+        format: OutputFormat::BAM,
+        extensions: &[".bam"],
+        index_extension: Some(".bai"),
+    },
+    FormatSpec {
+        format: OutputFormat::FASTA,
+        extensions: &[".fa", ".fasta"],
+        index_extension: Some(".fai"),
+    },
+    FormatSpec {
+        format: OutputFormat::BIGWIG,
+        extensions: &[".bigwig", ".bw"],
+        index_extension: None,
+    },
+    FormatSpec {
+        format: OutputFormat::BIGBED,
+        extensions: &[".bigbed", ".bb"],
+        index_extension: None,
+    },
+    FormatSpec {
+        format: OutputFormat::VCF,
+        extensions: &[".vcf.gz"],
+        index_extension: Some(".tbi"),
+    },
+    FormatSpec {
+        format: OutputFormat::BED,
+        extensions: &[".bed.gz"],
+        index_extension: Some(".tbi"),
+    },
+    FormatSpec {
+        format: OutputFormat::BEDGRAPH,
+        extensions: &[".bedgraph.gz"],
+        index_extension: Some(".tbi"),
+    },
+    FormatSpec {
+        format: OutputFormat::GFF,
+        extensions: &[".gff.gz", ".gff3.gz"],
+        index_extension: Some(".tbi"),
+    },
+    FormatSpec {
+        format: OutputFormat::GTF,
+        extensions: &[".gtf.gz"],
+        index_extension: Some(".tbi"),
+    },
+];
+
+/// Finds the [`FormatSpec`] whose extension matches `file_path`.
+///
+/// Matching is longest-extension-first, so `sample.bedgraph.gz` resolves to
+/// BEDGRAPH rather than being shadowed by a shorter suffix.
+pub fn match_format(file_path: &str) -> Option<&'static FormatSpec> {
+    let lower_path = file_path.to_ascii_lowercase();
+
+    SUPPORTED_FORMATS
+        .iter()
+        .filter_map(|spec| {
+            spec.extensions
+                .iter()
+                .filter(|extension| lower_path.ends_with(*extension))
+                .map(|extension| (extension.len(), spec))
+                .max_by_key(|(length, _)| *length)
+        })
+        .max_by_key(|(length, _)| *length)
+        .map(|(_, spec)| spec)
+}
+
+/// A serialisable view of [`SUPPORTED_FORMATS`] for clients.
+///
+/// The frontend loads this once at startup and uses it to decide which files a
+/// user may select, so it does not have to duplicate the extension table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileFormat {
+    pub format: String,
+    pub extensions: Vec<String>,
+    /// `None` when the index is embedded in the data file.
+    pub index_extension: Option<String>,
+}
+
+/// Returns the supported format table in serialisable form.
+pub fn supported_formats() -> Vec<FileFormat> {
+    SUPPORTED_FORMATS
+        .iter()
+        .map(|spec| FileFormat {
+            format: format!("{:?}", spec.format),
+            extensions: spec.extensions.iter().map(|e| e.to_string()).collect(),
+            index_extension: spec.index_extension.map(|e| e.to_string()),
+        })
+        .collect()
+}
+
 /// Infers the companion index URI from a genomic file URI.
 ///
-/// | Extension | Index path |
-/// |-----------|------------|
-/// | `.bam` | `<file>.bai` |
-/// | `.fa`, `.fasta` | `<file>.fai` |
-/// | `.bigwig`, `.bw`, `.bigbed`, `.bb` | `"-"` (embedded index) |
-/// | `.vcf.gz`, `.gff.gz`, `.bed.gz`, `.gtf.gz`, `.bedgraph.gz`, `.bed` | `<file>.tbi` |
+/// Returns `"-"` for formats whose index is embedded in the file itself
+/// (BigWig, BigBed).  Derived from [`SUPPORTED_FORMATS`].
 ///
 /// # Errors
 ///
-/// Returns [`ExtensionError`] when the extension is not in the list above.
+/// Returns [`SearchError::IndexPathError`] when the extension is not supported.
 pub fn get_index_path(file_path: &str) -> Result<String, SearchError> {
-    let lower_path = file_path.to_ascii_lowercase();
-    // Logic to determine the index path based on the file type
-    if lower_path.ends_with(".bam") {
-        Ok(format!("{}.bai", file_path))
-    } else if lower_path.ends_with(".fa") || lower_path.ends_with(".fasta") {
-        Ok(format!("{}.fai", file_path))
-    } else if lower_path.ends_with(".bigwig") || lower_path.ends_with(".bw") ||  lower_path.ends_with(".bigbed") || lower_path.ends_with(".bb") {
-        Ok("-".to_string())  // BigBed files have embedded index like BigWig
-    } else if lower_path.ends_with(".vcf.gz")
-        || lower_path.ends_with(".gff.gz")
-        || lower_path.ends_with(".bed.gz")
-        || lower_path.ends_with(".gtf.gz")
-        || lower_path.ends_with(".bed")
-        || lower_path.ends_with(".bedgraph.gz")
-    {
-        Ok(format!("{}.tbi", file_path))
-    } else {
-        Err(SearchError::IndexPathError(
-            "Unable to get index path from file extension".into(),
-        ))
-    }
+    let spec = match_format(file_path).ok_or_else(|| {
+        SearchError::IndexPathError("Unable to get index path from file extension".into())
+    })?;
+
+    Ok(match spec.index_extension {
+        Some(extension) => format!("{}{}", file_path, extension),
+        None => "-".to_string(),
+    })
 }
 
 /// Infers the [`OutputFormat`] from a file URI's extension.
 ///
+/// Derived from [`SUPPORTED_FORMATS`].
+///
 /// # Errors
 ///
-/// Returns [`SearchError`] when the extension does not match any known format.
+/// Returns [`SearchError::PathTypeError`] when the extension does not match any
+/// known format.
 pub fn get_output_format(file_path: &str) -> Result<OutputFormat, SearchError> {
-    let lower_path = file_path.to_ascii_lowercase();
-    // Logic to determine the output format based on the file type
-    if lower_path.ends_with(".bam") {
-        Ok(OutputFormat::BAM)
-    } else if lower_path.ends_with(".bigwig") || lower_path.ends_with(".bw") {
-        Ok(OutputFormat::BIGWIG)
-    } else if lower_path.ends_with(".bigbed") || lower_path.ends_with(".bb") {
-        Ok(OutputFormat::BIGBED)
-    } else if lower_path.ends_with(".vcf.gz") {
-        Ok(OutputFormat::VCF)
-    } else if lower_path.ends_with(".gff.gz") {
-        Ok(OutputFormat::GFF)
-    } else if lower_path.ends_with(".gtf.gz") {
-        Ok(OutputFormat::GTF)
-    } else if lower_path.ends_with(".bed.gz") {
-        Ok(OutputFormat::BED)
-    } else if lower_path.ends_with(".bedgraph.gz") {
-        Ok(OutputFormat::BEDGRAPH)
-    } else if lower_path.ends_with(".fa") || lower_path.ends_with(".fasta") {
-        Ok(OutputFormat::FASTA)
-    } else {
-        Err(SearchError::PathTypeError (
-            "Unable to determine file format from extension".into(),
-        ))
-    }
+    match_format(file_path)
+        .map(|spec| spec.format.clone())
+        .ok_or_else(|| {
+            SearchError::PathTypeError("Unable to determine file format from extension".into())
+        })
 }
 
 #[test]
@@ -225,8 +307,67 @@ fn test_get_index_path() {
     assert_eq!(index, "-");
     let index = get_index_path("file.bed.gz").unwrap();
     assert_eq!(index, "file.bed.gz.tbi");
-    let index = get_index_path("file.bed").unwrap();
-    assert_eq!(index, "file.bed.tbi");
+    // Plain `.bed` is no longer indexable: it is not bgzipped, so it cannot be
+    // range-queried.  `get_output_format` always rejected it; now both agree.
+    assert!(get_index_path("file.bed").is_err());
     let index = get_index_path("file.unknown");
     assert!(index.is_err());
+}
+
+#[test]
+fn test_match_format_prefers_longest_extension() {
+    // `.bedgraph.gz` must not be shadowed by a shorter suffix.
+    assert_eq!(
+        get_output_format("sample.bedgraph.gz").unwrap(),
+        OutputFormat::BEDGRAPH
+    );
+    assert_eq!(get_output_format("sample.bed.gz").unwrap(), OutputFormat::BED);
+}
+
+#[test]
+fn test_gff3_is_supported() {
+    assert_eq!(get_output_format("genes.gff3.gz").unwrap(), OutputFormat::GFF);
+    assert_eq!(get_index_path("genes.gff3.gz").unwrap(), "genes.gff3.gz.tbi");
+}
+
+#[test]
+fn test_plain_text_formats_are_rejected() {
+    // Un-bgzipped tabix formats cannot be range-queried.
+    for path in ["a.vcf", "a.bed", "a.gff", "a.gtf", "a.bedgraph", "a.gff3"] {
+        assert!(get_output_format(path).is_err(), "{path} should be rejected");
+        assert!(get_index_path(path).is_err(), "{path} should have no index");
+    }
+}
+
+#[test]
+fn test_cram_and_csi_are_not_supported() {
+    assert!(get_output_format("sample.cram").is_err());
+    assert!(match_format("sample.bam.csi").is_none());
+}
+
+#[test]
+fn test_embedded_index_formats() {
+    for path in ["a.bigwig", "a.bw", "a.bigbed", "a.bb"] {
+        assert_eq!(get_index_path(path).unwrap(), "-");
+        assert!(match_format(path).unwrap().index_extension.is_none());
+    }
+}
+
+#[test]
+fn test_match_format_is_case_insensitive() {
+    assert_eq!(get_output_format("SAMPLE.BAM").unwrap(), OutputFormat::BAM);
+    assert_eq!(get_output_format("Sample.VCF.GZ").unwrap(), OutputFormat::VCF);
+}
+
+#[test]
+fn test_supported_formats_is_serialisable_view() {
+    let formats = supported_formats();
+    assert_eq!(formats.len(), SUPPORTED_FORMATS.len());
+
+    let bam = formats.iter().find(|f| f.format == "BAM").unwrap();
+    assert_eq!(bam.extensions, vec![".bam"]);
+    assert_eq!(bam.index_extension.as_deref(), Some(".bai"));
+
+    let bigwig = formats.iter().find(|f| f.format == "BIGWIG").unwrap();
+    assert_eq!(bigwig.index_extension, None);
 }
