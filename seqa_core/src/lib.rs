@@ -25,6 +25,7 @@
 //! ```rust,no_run
 //! use seqa_core::api::search_options::SearchOptions;
 //! use seqa_core::stores::StoreService;
+//! use seqa_core::api::search::search_features;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,7 +35,7 @@
 //!     );
 //!
 //!     let store_service = StoreService::new();
-//!     let result = store_service.search_features(&opts).await?;
+//!     let result = search_features(&store_service, &opts).await?;
 //!     for line in &result.lines {
 //!         println!("{}", line);
 //!     }
